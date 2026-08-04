@@ -264,3 +264,50 @@ describe("artifact availability", () => {
     expect(await screen.findByRole("link", { name: /Download Installer/i })).toBeInTheDocument();
   });
 });
+
+describe("unavailable-build messaging", () => {
+  it("shows a public-facing message off localhost, not the build script", async () => {
+    // jsdom's default location is http://localhost/, so override it to look
+    // like the deployed site. Telling visitors to run a Python script is a
+    // leaked internal instruction.
+    const original = window.location;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...original, hostname: "ufc-website.up.railway.app" },
+    });
+
+    mockVersionJson(
+      { version: "0.1.0", downloadUrl: "/downloads/UFC-Predictor-Setup-0.1.0.exe", kind: "installer" },
+      true,
+      false
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/download"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/isn't published yet/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /releases page/i })).toBeInTheDocument();
+    expect(screen.queryByText(/build_release\.py/)).not.toBeInTheDocument();
+
+    Object.defineProperty(window, "location", { configurable: true, value: original });
+  });
+
+  it("keeps the build hint when running locally", async () => {
+    mockVersionJson(
+      { version: "0.1.0", downloadUrl: "/downloads/UFC-Predictor-Setup-0.1.0.exe", kind: "installer" },
+      true,
+      false
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/download"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/build_release\.py/)).toBeInTheDocument();
+  });
+});

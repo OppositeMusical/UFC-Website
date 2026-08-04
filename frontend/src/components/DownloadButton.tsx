@@ -14,6 +14,19 @@ interface VersionInfo {
 
 type Status = "loading" | "ready" | "unavailable";
 
+const RELEASES_URL = "https://github.com/OppositeMusical/UFC-Website/releases";
+
+/**
+ * The "no build published" state has two audiences. On a dev machine the
+ * useful thing to say is which script produces one; on the public site that
+ * same text is a leaked internal instruction telling visitors to run Python.
+ */
+function isLocalhost(): boolean {
+  if (typeof window === "undefined") return false;
+  const { hostname } = window.location;
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+}
+
 function formatSize(bytes?: number): string | null {
   if (!bytes) return null;
   return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
@@ -89,10 +102,20 @@ export default function DownloadButton() {
         <span className="btn btn--disabled" aria-disabled="true">
           Build not available yet
         </span>
-        <p className="download-card__version">
-          No packaged build is published here yet. Build one locally with{" "}
-          <code>python scripts/build_release.py</code> from <code>backend/</code>.
-        </p>
+        {isLocalhost() ? (
+          <p className="download-card__version">
+            No packaged build is published here yet. Build one locally with{" "}
+            <code>python scripts/build_release.py</code> from <code>backend/</code>.
+          </p>
+        ) : (
+          <p className="download-card__version">
+            The Windows build isn't published yet. Check the{" "}
+            <a href={RELEASES_URL} target="_blank" rel="noreferrer">
+              releases page
+            </a>{" "}
+            for the latest build.
+          </p>
+        )}
       </div>
     );
   }

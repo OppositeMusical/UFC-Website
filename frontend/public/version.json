@@ -1,8 +1,10 @@
 {
   "version": "0.1.0",
-  "downloadUrl": "/downloads/UFCPredictor-0.1.0-windows.zip",
-  "sizeBytes": 107027534,
-  "sha256": "1c1710234bc6ec664a68484953588125f4e380c35a6880cb67c7dd871959d781",
+  "downloadUrl": "/downloads/UFC-Predictor-Setup-0.1.0.exe",
+  "fileName": "UFC-Predictor-Setup-0.1.0.exe",
+  "kind": "installer",
+  "sizeBytes": 186904009,
+  "sha256": "b6a08e69d90c9cd519e1fb90777b181a23296c6b93bceaa7d80d37e2e46d96cf",
   "releasedAt": "2026-08-04",
-  "notes": "Built locally by scripts/build_release.py. For a public release, upload this zip to a release host and change downloadUrl to that URL."
+  "notes": "Served locally out of frontend/public/downloads by `npm run dev` / `npm run build`. For a public release, re-run with --github-release OWNER/REPO after uploading the installer."
 }

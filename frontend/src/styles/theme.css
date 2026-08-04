@@ -582,6 +582,12 @@ a {
   font-size: 0.82em;
 }
 
+.download-card__meta {
+  margin: 0.3rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
 /* Full hash, wrapped - a truncated checksum can't be verified against. */
 .download-card__hash {
   margin: 0.6rem 0 0;

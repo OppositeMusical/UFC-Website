@@ -13,9 +13,11 @@ function mockVersionJson(body: unknown, ok = true) {
 beforeEach(() => {
   mockVersionJson({
     version: "0.1.0",
-    downloadUrl: "/downloads/UFCPredictor-0.1.0-windows.zip",
-    sizeBytes: 107027534,
-    sha256: "1c1710234bc6ec664a68484953588125f4e380c35a6880cb67c7dd871959d781",
+    downloadUrl: "/downloads/UFC-Predictor-Setup-0.1.0.exe",
+    fileName: "UFC-Predictor-Setup-0.1.0.exe",
+    kind: "installer",
+    sizeBytes: 186904009,
+    sha256: "b6a08e69d90c9cd519e1fb90777b181a23296c6b93bceaa7d80d37e2e46d96cf",
   });
 });
 
@@ -47,7 +49,7 @@ describe("App", () => {
         <App />
       </MemoryRouter>
     );
-    expect(await screen.findByRole("link", { name: /Download for Windows/i })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /Download Installer/i })).toBeInTheDocument();
     expect(screen.getByText(/informational and entertainment purposes only/i)).toBeInTheDocument();
   });
 });
@@ -91,21 +93,23 @@ describe("scroll reveal", () => {
 });
 
 describe("DownloadButton", () => {
-  it("links to the real artifact and shows version, size and checksum", async () => {
+  it("links to the Electron installer and shows version, size and checksum", async () => {
     render(
       <MemoryRouter initialEntries={["/download"]}>
         <App />
       </MemoryRouter>
     );
 
-    const link = await screen.findByRole("link", { name: /Download for Windows/i });
-    expect(link).toHaveAttribute("href", "/downloads/UFCPredictor-0.1.0-windows.zip");
+    // "installer" kind changes the label - a .exe installer and a raw zip
+    // are not the same promise to the user.
+    const link = await screen.findByRole("link", { name: /Download Installer/i });
+    expect(link).toHaveAttribute("href", "/downloads/UFC-Predictor-Setup-0.1.0.exe");
     expect(link).toHaveAttribute("download");
     expect(screen.getByText(/Version 0\.1\.0/)).toBeInTheDocument();
-    expect(screen.getByText(/102 MB/)).toBeInTheDocument();
+    expect(screen.getByText(/178 MB/)).toBeInTheDocument();
     // Full hash, not truncated - a partial checksum can't be verified.
     expect(
-      screen.getByText("1c1710234bc6ec664a68484953588125f4e380c35a6880cb67c7dd871959d781")
+      screen.getByText("b6a08e69d90c9cd519e1fb90777b181a23296c6b93bceaa7d80d37e2e46d96cf")
     ).toBeInTheDocument();
   });
 
@@ -124,7 +128,7 @@ describe("DownloadButton", () => {
     );
 
     expect(await screen.findByText(/Build not available yet/i)).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /Download for Windows/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Download Installer/i })).not.toBeInTheDocument();
   });
 
   it("degrades gracefully when version.json is missing", async () => {

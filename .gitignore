@@ -16,6 +16,9 @@ node_modules/
 frontend/dist/
 frontend/tsconfig.tsbuildinfo
 
+# Electron shell build output
+desktop/release/
+
 # App data (never commit user data dirs if run from repo root during dev)
 .secrets.enc
 .secrets.key

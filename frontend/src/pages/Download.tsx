@@ -7,7 +7,7 @@ export default function Download() {
       <div className="container">
         <Reveal className="section__heading">
           <h2>Download UFC Predictor</h2>
-          <p>A single Windows package - unzip it, run it, and you're in.</p>
+          <p>A standard Windows installer. Runs as a real desktop app - no browser tab, no terminal.</p>
         </Reveal>
 
         <Reveal delay={90} from="scale">
@@ -21,23 +21,28 @@ export default function Download() {
         </Reveal>
         <ol className="steps">
           <Reveal as="li" from="left">
-            <strong>Unzip and run UFCPredictor.exe.</strong>
-            The app starts a small local server and opens it in your default browser automatically.
+            <strong>Run the installer.</strong>
+            It adds UFC Predictor to your Start menu and desktop. Everything it needs is bundled -
+            no Python, no separate downloads, and the fighter database ships pre-loaded so there's
+            nothing to sync before your first prediction.
           </Reveal>
           <Reveal as="li" from="left" delay={90}>
-            <strong>(Optional) Install Ollama for fully local AI.</strong>
-            If you'd rather not use a cloud API key, install{" "}
-            <a href="https://ollama.com" target="_blank" rel="noreferrer">Ollama</a> and pull a model
-            (e.g. <code>ollama pull llama3.1</code>) before opening Settings in the app.
+            <strong>Windows may warn you first.</strong>
+            The installer isn't code-signed yet, so SmartScreen shows "Windows protected your PC".
+            Choose <em>More info</em> then <em>Run anyway</em>. You can verify the download against
+            the SHA-256 above if you'd rather check it yourself.
           </Reveal>
           <Reveal as="li" from="left" delay={180}>
-            <strong>Or add a cloud API key.</strong>
-            In the app's Settings page, pick OpenAI, Gemini, Deepseek, or Claude and paste in your own API key.
-            Keys are stored locally via your OS's credential manager, never sent anywhere but the provider you chose.
+            <strong>Pick your AI in Settings.</strong>
+            Install <a href="https://ollama.com" target="_blank" rel="noreferrer">Ollama</a> and pull a
+            model (e.g. <code>ollama pull llama3.1</code>) to stay fully offline, or paste in an API key
+            for OpenAI, Gemini, Deepseek, or Claude. Keys are stored in your OS credential manager and
+            never sent anywhere but the provider you chose.
           </Reveal>
           <Reveal as="li" from="left" delay={270}>
-            <strong>Sync the fighter database.</strong>
-            Still in Settings, click "Sync Now" to pull real UFC fighter stats before making predictions.
+            <strong>Start predicting.</strong>
+            Head to PrizePicks, DraftKings, or Kalshi, enter a prop, and get a stat-grounded call you can
+            keep chatting about. Refresh the fighter database anytime from Settings.
           </Reveal>
         </ol>
 

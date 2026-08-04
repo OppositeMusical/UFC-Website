@@ -3,6 +3,9 @@ import { useEffect, useState } from "react";
 interface VersionInfo {
   version: string;
   downloadUrl: string;
+  /** "installer" = the Electron desktop build; anything else is a raw archive. */
+  kind?: string;
+  fileName?: string;
   sizeBytes?: number;
   sha256?: string;
   releasedAt?: string;
@@ -22,7 +25,11 @@ export default function DownloadButton() {
   useEffect(() => {
     let cancelled = false;
 
-    fetch("/version.json")
+    // no-store, because this file is the pointer to the current release.
+    // A cached copy keeps sending people to whatever URL was current when
+    // they last loaded the page - which is exactly how a stale placeholder
+    // survived a rebuild and 404'd on click.
+    fetch("/version.json", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
       .then((data: VersionInfo) => {
         if (cancelled) return;
@@ -76,12 +83,13 @@ export default function DownloadButton() {
           <path d="M7 12l5 5 5-5" />
           <path d="M4 21h16" />
         </svg>
-        Download for Windows
+        {info.kind === "installer" ? "Download Installer" : "Download for Windows"}
       </a>
       <p className="download-card__version">
         Version {info.version}
         {size ? ` · ${size}` : ""} · Windows 10/11 (64-bit)
       </p>
+      <p className="download-card__meta">Desktop app · Fighter database included</p>
       {info.sha256 && (
         <p className="download-card__hash">
           <span>SHA-256</span>

@@ -1,21 +1,27 @@
 #!/usr/bin/env python
-"""Packages the PyInstaller build into a downloadable zip and points the
-marketing site's version.json at it.
+"""Publishes the Electron desktop installer to the marketing site.
 
-Usage (from backend/, after `pyinstaller pyinstaller/app.spec`):
-    python scripts/build_release.py
-    python scripts/build_release.py --version 0.2.0
+The site hands users the Electron build - a normal Windows installer that
+puts "UFC Predictor" in the Start menu and opens in its own window. The raw
+PyInstaller folder is an implementation detail bundled inside it, not
+something a user should be downloading and unzipping.
+
+Full release sequence (order matters - see desktop/README.md):
+
+    cd backend
+    pyinstaller pyinstaller/app.spec        # 1. Python bundle
+    cd ../desktop && npm run dist           # 2. wraps (1) into the installer
+    cd ../backend
+    python scripts/build_release.py         # 3. publishes (2) to the site
 
 Writes:
-    frontend/public/downloads/UFCPredictor-<version>-windows.zip
+    frontend/public/downloads/UFC-Predictor-Setup-<version>.exe
     frontend/public/version.json
 
-The zip lands in the site's `public/` directory so `npm run dev` and
-`npm run build` both serve it with no extra hosting - which is what makes
-the Download page work end to end on a local machine. It is gitignored:
-this is a ~100MB build artifact regenerated from `dist/`, not source. For a
-real public release, upload the same zip to a release host and point
-version.json's downloadUrl at that instead.
+The installer lands in the site's `public/` directory so `npm run dev` and
+`npm run build` both serve it with no extra hosting. It is gitignored: a
+~190MB build artifact, not source. For a public release, upload the same
+file somewhere and re-run with --github-release OWNER/REPO.
 """
 from __future__ import annotations
 
@@ -23,83 +29,133 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import re
 import shutil
 import sys
-import zipfile
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 REPO_ROOT = BACKEND_DIR.parent
-DIST_DIR = BACKEND_DIR / "dist" / "UFCPredictor"
+RELEASE_DIR = REPO_ROOT / "desktop" / "release"
 PUBLIC_DIR = REPO_ROOT / "frontend" / "public"
 DOWNLOADS_DIR = PUBLIC_DIR / "downloads"
 
-DEFAULT_VERSION = "0.1.0"
+
+def find_installer(version: str | None) -> tuple[Path, str]:
+    """Locates the electron-builder NSIS output and the version it encodes.
+
+    electron-builder names it "UFC Predictor Setup 1.2.3.exe" - spaces and
+    all - which is awkward in a URL, so the published copy gets renamed.
+    """
+    if not RELEASE_DIR.exists():
+        sys.exit(
+            f"No Electron build found at {RELEASE_DIR}.\n"
+            "Run `npm run dist` in desktop/ first (and `pyinstaller pyinstaller/app.spec` "
+            "in backend/ before that, so the installer wraps a current backend)."
+        )
+
+    candidates = sorted(
+        (p for p in RELEASE_DIR.glob("*Setup*.exe") if not p.name.endswith(".__uninstaller.exe")),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if not candidates:
+        sys.exit(f"No installer (*Setup*.exe) in {RELEASE_DIR}. Did `npm run dist` finish?")
+
+    installer = candidates[0]
+    if version:
+        return installer, version
+
+    match = re.search(r"(\d+\.\d+\.\d+)", installer.stem)
+    if not match:
+        sys.exit(f"Could not read a version out of {installer.name} - pass --version explicitly.")
+    return installer, match.group(1)
+
+
+def sha256_of(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Package the built app for download from the site")
-    parser.add_argument("--version", default=DEFAULT_VERSION, help=f"Release version (default: {DEFAULT_VERSION})")
+    parser = argparse.ArgumentParser(description="Publish the Electron installer to the marketing site")
+    parser.add_argument("--version", help="Override the version parsed from the installer filename")
     parser.add_argument(
         "--keep-old",
         action="store_true",
-        help="Keep previously built zips instead of clearing the downloads directory",
+        help="Keep previously published installers instead of clearing the downloads directory",
+    )
+    parser.add_argument(
+        "--download-url",
+        help="Point version.json at an external URL instead of the locally served copy",
+    )
+    parser.add_argument(
+        "--github-release",
+        metavar="OWNER/REPO",
+        help=(
+            "Shorthand for --download-url pointing at that repo's latest release asset, e.g. "
+            "OppositeMusical/UFC-Website. You still have to create the release and upload the installer."
+        ),
     )
     args = parser.parse_args()
 
-    if not DIST_DIR.exists():
-        sys.exit(
-            f"No PyInstaller build found at {DIST_DIR}.\n"
-            "Run `pyinstaller pyinstaller/app.spec` from backend/ first."
-        )
+    if args.download_url and args.github_release:
+        sys.exit("Use either --download-url or --github-release, not both.")
 
-    exe = DIST_DIR / "UFCPredictor.exe"
-    if not exe.exists():
-        sys.exit(f"{DIST_DIR} exists but has no UFCPredictor.exe - the build looks incomplete.")
+    installer, version = find_installer(args.version)
 
     DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
     if not args.keep_old:
-        # Otherwise every version ever built keeps being copied into
+        # Otherwise every version ever published keeps getting copied into
         # frontend/dist by `npm run build`.
-        for stale in DOWNLOADS_DIR.glob("UFCPredictor-*.zip"):
+        for stale in list(DOWNLOADS_DIR.glob("*.exe")) + list(DOWNLOADS_DIR.glob("*.zip")):
             print(f"Removing old {stale.name}")
             stale.unlink()
 
-    zip_name = f"UFCPredictor-{args.version}-windows.zip"
-    zip_path = DOWNLOADS_DIR / zip_name
+    asset_name = f"UFC-Predictor-Setup-{version}.exe"
+    dest = DOWNLOADS_DIR / asset_name
+    print(f"Copying {installer.name} -> {dest.relative_to(REPO_ROOT)}")
+    shutil.copyfile(installer, dest)
 
-    files = [p for p in DIST_DIR.rglob("*") if p.is_file()]
-    print(f"Zipping {len(files)} files from {DIST_DIR} -> {zip_path}")
-    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
-        for i, path in enumerate(files, 1):
-            # Nest under a top-level folder so unzipping doesn't scatter
-            # ~600 files into whatever directory the user extracted into.
-            archive.write(path, Path("UFCPredictor") / path.relative_to(DIST_DIR))
-            if i % 100 == 0 or i == len(files):
-                print(f"  {i}/{len(files)}", end="\r", flush=True)
-    print()
-
-    size_bytes = zip_path.stat().st_size
+    size_bytes = dest.stat().st_size
     print(f"Hashing {size_bytes / (1024 * 1024):.1f} MB...")
-    digest = hashlib.sha256()
-    with zip_path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
-            digest.update(chunk)
+    checksum = sha256_of(dest)
+
+    if args.github_release:
+        download_url = f"https://github.com/{args.github_release}/releases/latest/download/{asset_name}"
+        note = (
+            f"Points at the latest GitHub release of {args.github_release}. "
+            f"Create that release and upload {asset_name} as an asset, or the link 404s."
+        )
+    elif args.download_url:
+        download_url = args.download_url
+        note = "Points at an externally hosted copy. Upload the built installer there."
+    else:
+        download_url = f"/downloads/{asset_name}"
+        note = (
+            "Served locally out of frontend/public/downloads by `npm run dev` / `npm run build`. "
+            "For a public release, re-run with --github-release OWNER/REPO after uploading the installer."
+        )
 
     version_info = {
-        "version": args.version,
-        "downloadUrl": f"/downloads/{zip_name}",
+        "version": version,
+        "downloadUrl": download_url,
+        "fileName": asset_name,
+        "kind": "installer",
         "sizeBytes": size_bytes,
-        "sha256": digest.hexdigest(),
+        "sha256": checksum,
         "releasedAt": dt.date.today().isoformat(),
-        "notes": "Built locally by scripts/build_release.py. For a public release, upload this zip to a release host and change downloadUrl to that URL.",
+        "notes": note,
     }
     version_path = PUBLIC_DIR / "version.json"
     version_path.write_text(json.dumps(version_info, indent=2) + "\n", encoding="utf-8")
 
-    print(f"Wrote {zip_path}  ({size_bytes / (1024 * 1024):.1f} MB)")
+    print(f"Wrote {dest}  ({size_bytes / (1024 * 1024):.1f} MB)")
     print(f"Wrote {version_path}")
-    print(f"sha256: {version_info['sha256']}")
+    print(f"sha256: {checksum}")
     print("\nServe it:  cd frontend && npm run dev   ->  open /download")
 
 

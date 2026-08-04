@@ -7,7 +7,7 @@ Status: v1 spec, written before implementation per project requirement.
 Two decoupled deliverables:
 
 1. **Marketing/landing website** (`frontend/`) — a public, static, MMA-themed site whose only job is to explain the product and let visitors download the desktop app. No backend, no accounts, no user data.
-2. **UFC Predictor desktop app** (`backend/`) — a Python program distributed to end users as a Windows application. It runs a local web server and opens its UI in the browser. It supports both a fully local AI mode (Ollama) and cloud AI providers (OpenAI, Google Gemini, Deepseek, Anthropic Claude) via user-supplied API keys. It offers three prediction pages modeled on prop-betting/prediction-market formats (PrizePicks, DraftKings, Kalshi), a persistent multi-turn chatbot, and a Retrieval-Augmented-Generation (RAG) layer backed by a local ChromaDB vector store of real UFC fighter statistics.
+2. **UFC Predictor desktop app** (`backend/` + `desktop/`) — a Python program distributed to end users as a Windows application. It runs a local web server; an Electron shell (`desktop/`) spawns that server and renders its UI in a native window, so users get a real desktop app rather than a browser tab. Running `backend/run.py` directly still opens the browser instead, which is the development path. It supports both a fully local AI mode (Ollama) and cloud AI providers (OpenAI, Google Gemini, Deepseek, Anthropic Claude) via user-supplied API keys. It offers three prediction pages modeled on prop-betting/prediction-market formats (PrizePicks, DraftKings, Kalshi), a persistent multi-turn chatbot, and a Retrieval-Augmented-Generation (RAG) layer backed by a local ChromaDB vector store of real UFC fighter statistics.
 
 **Non-goals for v1**: user accounts/auth, cloud sync, mobile apps, real-money betting integration, macOS/Linux packaging (Windows-only for v1; the app runs fine on macOS/Linux from source since Flask/Python are cross-platform, but only Windows gets a packaged build).
 
@@ -298,12 +298,34 @@ pytest backend/tests
 ```
 
 **Package (Windows):**
+
+The shipped artifact is an **Electron desktop app** (`desktop/`) that wraps
+the Flask server: Electron spawns the packaged backend as a child process,
+waits for `/health`, and points a `BrowserWindow` at it. The UI is unchanged —
+still the same Jinja templates the standalone server renders. See
+`desktop/README.md` for the design notes.
+
+Each step's output is the next step's input, and **nothing detects a stale
+input** — skipping a step ships a mismatched build rather than failing:
+
 1. Ensure `requirements.txt` is installed in the build environment.
 2. **Mandatory pre-bundle step**: run the app once with network access so ChromaDB's default embedding function downloads its ONNX model cache; then include that cache directory in the PyInstaller `datas` so a packaged, possibly-offline install doesn't silently fail to embed on first use.
 3. **Bake the seed database** per §10 (`build_seed_data.py`) so `app/seed_data/` has real content before the next step — PyInstaller's `datas` entry for it must point at an existing directory.
-4. `pyinstaller backend/pyinstaller/app.spec` → produces a `dist/UFCPredictor/` onedir build containing `UFCPredictor.exe`.
-5. Zip `dist/UFCPredictor/` — this zip is the literal file linked from the landing page's Download button.
-6. **Follow-up, not done in v1**: wrap the onedir build in an Inno Setup installer for a Start Menu shortcut and clean uninstall.
+4. `pyinstaller backend/pyinstaller/app.spec` → `backend/dist/UFCPredictor/` (onedir, contains `UFCPredictor.exe`).
+5. `cd desktop && npm run dist` → copies step 4's folder in as `resources/backend` and emits `desktop/release/UFC Predictor Setup <version>.exe` (NSIS installer, ~180MB).
+6. `python backend/scripts/build_release.py` → copies step 5's installer into `frontend/public/downloads/` and regenerates `version.json` (URL, size, SHA-256) — this is what the landing page's Download button serves.
+
+> **Rebuild step 4 whenever `backend/` changes.** electron-builder copies
+> `backend/dist/UFCPredictor` in verbatim; it cannot tell the Python source
+> moved on. A stale bundle fails confusingly rather than loudly — one built
+> before `run.py` grew `--port` ignored the flag, bound its default 8765
+> instead of the port Electron assigned, and the app died on a health-check
+> timeout while a perfectly healthy server sat on the wrong port.
+
+**Not done yet**: the installer is unsigned, so Windows SmartScreen shows
+"Windows protected your PC" on first run. Code signing needs a purchased
+certificate; the Download page tells users what to expect and publishes the
+SHA-256 so they can verify the file themselves.
 
 **Marketing site:**
 ```

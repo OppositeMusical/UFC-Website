@@ -1,0 +1,55 @@
+{
+  "name": "ufc-predictor-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron shell for the UFC Predictor local Flask app",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win",
+    "dist:dir": "electron-builder --win --dir"
+  },
+  "devDependencies": {
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.ufcpredictor.desktop",
+    "productName": "UFC Predictor",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "backend.js",
+      "preload.js",
+      "splash.html"
+    ],
+    "extraResources": [
+      {
+        "from": "../backend/dist/UFCPredictor",
+        "to": "backend",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "UFC Predictor"
+    }
+  }
+}

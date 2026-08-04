@@ -1,12 +1,24 @@
-"""Entry point for the UFC Predictor desktop app.
+"""Entry point for the UFC Predictor backend.
 
 Starts a waitress WSGI server (not Flask's dev server - see docs/SPEC.md
-section 3), guards against a second instance already listening on the
-chosen port, and opens the user's default browser automatically.
+section 3). Runs in two modes:
+
+* Standalone - launched directly, binds the default port and opens the
+  user's browser. Unchanged behaviour for anyone running `python run.py`.
+* Embedded - launched by the Electron shell (desktop/), which picks a free
+  port and passes `--port N --no-browser`. Electron owns the window, so
+  opening a browser tab as well would be wrong.
+
+On startup it prints a machine-readable `UFC_PREDICTOR_READY <url>` line;
+the Electron main process watches stdout for it as a fast path, and polls
+/health as the authoritative check.
 """
 from __future__ import annotations
 
+import argparse
+import os
 import socket
+import sys
 import threading
 import time
 import webbrowser
@@ -16,6 +28,8 @@ from waitress import serve
 from app import create_app
 from app.config import Config
 
+READY_PREFIX = "UFC_PREDICTOR_READY"
+
 
 def _port_in_use(host: str, port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -23,24 +37,54 @@ def _port_in_use(host: str, port: int) -> bool:
         return sock.connect_ex((host, port)) == 0
 
 
-def main() -> None:
-    host = "127.0.0.1"
-    port = Config.DEFAULT_PORT
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run the UFC Predictor backend server")
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("UFC_PREDICTOR_PORT") or 0) or None,
+        help=f"Port to bind (default: {Config.DEFAULT_PORT}). Electron passes a free port here.",
+    )
+    parser.add_argument("--host", default="127.0.0.1", help="Interface to bind (default: 127.0.0.1)")
+    parser.add_argument(
+        "--no-browser",
+        action="store_true",
+        default=os.environ.get("UFC_PREDICTOR_NO_BROWSER") == "1",
+        help="Don't open a browser tab - used when a shell (Electron) provides the window",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = _parse_args(argv)
+    host = args.host
+    port = args.port or Config.DEFAULT_PORT
+    url = f"http://{host}:{port}/"
 
     if _port_in_use(host, port):
-        # Almost certainly another instance of this app is already running -
-        # just focus a browser tab on it instead of starting a second server.
-        webbrowser.open(f"http://{host}:{port}/")
+        if args.no_browser:
+            # Electron picked this port moments ago, so something else
+            # grabbing it means the launch is genuinely broken - failing
+            # loudly beats silently attaching to a stranger's server.
+            print(f"ERROR: port {port} is already in use", file=sys.stderr, flush=True)
+            raise SystemExit(1)
+        # Standalone: almost certainly another copy of this app is already
+        # running, so focus a tab on it rather than starting a second server.
+        webbrowser.open(url)
         return
 
     app = create_app()
 
-    def open_browser() -> None:
-        time.sleep(1.0)
-        webbrowser.open(f"http://{host}:{port}/")
+    if not args.no_browser:
+        def open_browser() -> None:
+            time.sleep(1.0)
+            webbrowser.open(url)
 
-    threading.Thread(target=open_browser, daemon=True).start()
-    print(f"UFC Predictor running at http://{host}:{port}/  (Ctrl+C to stop)")
+        threading.Thread(target=open_browser, daemon=True).start()
+
+    # Printed before serve() blocks. Electron reads this to learn the URL.
+    print(f"{READY_PREFIX} {url}", flush=True)
+    print(f"UFC Predictor running at {url}  (Ctrl+C to stop)", flush=True)
     serve(app, host=host, port=port)
 
 

@@ -60,9 +60,9 @@ export default function Home() {
               that draws the numbered badges still increments. */}
           <ol className="steps">
             <Reveal as="li" from="left">
-              <strong>Download and run the app.</strong>
-              It's a local web app - a small server runs on your machine and opens in your browser. No account, no
-              cloud dependency required.
+              <strong>Install the desktop app.</strong>
+              One Windows installer, and it runs in its own window. Everything is bundled - no Python, no account,
+              no cloud dependency, and the fighter database ships pre-loaded.
             </Reveal>
             <Reveal as="li" from="left" delay={110}>
               <strong>Choose your AI.</strong>
@@ -70,9 +70,9 @@ export default function Home() {
               Deepseek, or Claude from the Settings page.
             </Reveal>
             <Reveal as="li" from="left" delay={220}>
-              <strong>Sync the fighter database, then predict.</strong>
-              One click pulls real UFC fighter stats. Then head to PrizePicks, DraftKings, or Kalshi, enter a prop,
-              and get a stat-grounded call you can keep chatting about.
+              <strong>Start predicting.</strong>
+              Thousands of fighters are already loaded, so there's no wait. Head to PrizePicks, DraftKings, or
+              Kalshi, enter a prop, and get a stat-grounded call you can keep chatting about.
             </Reveal>
           </ol>
         </div>

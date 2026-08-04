@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}{{ config.display_name }} - UFC Predictor{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/betting.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="platform-header" style="--platform-color: {{ config.brand_color }};">
+  <span class="platform-badge"></span>
+  <h1 class="page-title" style="margin:0;">{{ config.display_name }}</h1>
+</div>
+<p class="page-subtitle">Enter a fighter prop and get an AI-generated over/under call backed by real career stats.</p>
+
+<div class="card">
+  <form id="bet-form" data-platform="{{ platform }}">
+    <div class="vs-row">
+      <div class="form-row autocomplete">
+        <label for="fighter-a-input">Fighter (the prop is on this fighter)</label>
+        <input type="text" id="fighter-a-input" autocomplete="off" placeholder="Start typing a fighter name..." />
+        <input type="hidden" id="fighter-a-id" />
+        <div class="autocomplete__results" id="fighter-a-results"></div>
+      </div>
+      <div class="vs-label">VS</div>
+      <div class="form-row autocomplete">
+        <label for="fighter-b-input">Opponent</label>
+        <input type="text" id="fighter-b-input" autocomplete="off" placeholder="Start typing a fighter name..." />
+        <input type="hidden" id="fighter-b-id" />
+        <div class="autocomplete__results" id="fighter-b-results"></div>
+      </div>
+    </div>
+
+    <div class="form-grid" style="margin-top: 1.1rem;">
+      <div class="form-row">
+        <label for="stat-category">Stat Category</label>
+        <select id="stat-category">
+          {% for cat in config.stat_categories %}
+          <option value="{{ cat.value }}">{{ cat.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <label for="line-value">Line (Over/Under)</label>
+        <input type="number" id="line-value" step="0.5" placeholder="e.g. 2.5" />
+      </div>
+    </div>
+
+    <button type="submit" class="btn" id="submit-btn">Get Prediction</button>
+    <div class="error-banner" id="error-banner"></div>
+  </form>
+
+  <div class="prediction-loading" id="prediction-loading">
+    <p class="prediction-loading__note"><span class="btn__spinner"></span> Pulling career stats and reasoning through the matchup...</p>
+    <div class="skeleton-line skeleton-line--title"></div>
+    <div class="skeleton-line"></div>
+    <div class="skeleton-line"></div>
+    <div class="skeleton-line skeleton-line--short"></div>
+  </div>
+
+  <div class="prediction-result" id="prediction-result">
+    <div class="prediction-call">
+      <div class="confidence-ring">
+        <svg width="78" height="78" viewBox="0 0 78 78" aria-hidden="true">
+          <circle class="confidence-ring__track" cx="39" cy="39" r="33"></circle>
+          <circle class="confidence-ring__fill" id="confidence-arc" cx="39" cy="39" r="33"></circle>
+        </svg>
+        <div class="confidence-ring__value">
+          <span id="prediction-confidence">0%</span>
+          <span class="confidence-ring__label">Confidence</span>
+        </div>
+      </div>
+      <span class="prediction-call__direction" id="prediction-direction"></span>
+    </div>
+    <p class="prediction-reasoning" id="prediction-reasoning"></p>
+    <a class="btn btn--secondary" id="continue-in-chat" href="#">Continue in Chat</a>
+  </div>
+</div>
+
+{% if config.supports_market_question %}
+<div class="card">
+  <h2>Market Question</h2>
+  <p class="page-subtitle" style="margin-bottom:1.1rem;">
+    Kalshi contracts aren't limited to stat lines. Describe any market in plain language and the AI will
+    estimate the probability it resolves YES. Name the fighters and their real stats get pulled in.
+  </p>
+
+  <form id="market-form">
+    <div class="form-row">
+      <label for="market-question">Question</label>
+      <textarea id="market-question" class="market-question" rows="3" maxlength="500"
+                placeholder="e.g. Will Alex Pereira win by knockout in round 1?"></textarea>
+      <div class="market-meta">
+        <span class="market-counter" id="market-counter">0 / 500</span>
+      </div>
+    </div>
+    <button type="submit" class="btn" id="market-submit-btn">Estimate Probability</button>
+    <div class="error-banner" id="market-error"></div>
+  </form>
+
+  <div class="prediction-loading" id="market-loading">
+    <p class="prediction-loading__note"><span class="btn__spinner"></span> Weighing the market against fighter stats...</p>
+    <div class="skeleton-line skeleton-line--title"></div>
+    <div class="skeleton-line"></div>
+    <div class="skeleton-line skeleton-line--short"></div>
+  </div>
+
+  <div class="prediction-result" id="market-result">
+    <div class="prediction-call">
+      <div class="confidence-ring">
+        <svg width="78" height="78" viewBox="0 0 78 78" aria-hidden="true">
+          <circle class="confidence-ring__track" cx="39" cy="39" r="33"></circle>
+          <circle class="confidence-ring__fill over" id="market-arc" cx="39" cy="39" r="33"></circle>
+        </svg>
+        <div class="confidence-ring__value">
+          <span id="market-probability">0%</span>
+          <span class="confidence-ring__label">Yes</span>
+        </div>
+      </div>
+      <div class="market-verdict">
+        <span class="market-verdict__lean" id="market-lean"></span>
+        <span class="market-verdict__matched" id="market-matched"></span>
+      </div>
+    </div>
+    <p class="prediction-reasoning" id="market-reasoning"></p>
+    <a class="btn btn--secondary" id="market-continue" href="#">Continue in Chat</a>
+  </div>
+</div>
+{% endif %}
+
+<p class="disclaimer">
+  This analysis is for informational and entertainment purposes only. It is not financial or gambling advice,
+  and this app does not place bets or wagers on your behalf. You are responsible for complying with the laws
+  and platform terms that apply to you.
+</p>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/betting.js') }}"></script>
+{% endblock %}

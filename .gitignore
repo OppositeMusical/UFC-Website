@@ -1,24 +1,43 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
 
-node_modules
-dist
-dist-ssr
-*.local
+# Backend runtime/build artifacts
+backend/build/
+backend/dist/
+backend/*.spec.bak
+backend/data/
+backend/tests/**/__pycache__/
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
+
+# App data (never commit user data dirs if run from repo root during dev)
+.secrets.enc
+.secrets.key
+*.db
+
+# Baked seed data: a ~28MB build artifact regenerated from a completed
+# scrape via scripts/build_seed_data.py, not source. Only the placeholder
+# README is tracked (pyinstaller/app.spec needs the directory to exist).
+backend/seed_data_build/
+backend/app/seed_data/*
+!backend/app/seed_data/README.md
+backend/full_scrape.log
+backend/live_scrape_test.log
+
+# Packaged release zip (~100MB), rebuilt from backend/dist by
+# scripts/build_release.py. version.json stays tracked - it's the contract
+# the Download page reads - but the binary it points at is not.
+frontend/public/downloads/
+backend/newuser_test_data/
+
+# Editor/OS cruft
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+Thumbs.db
+.vscode/
+.idea/

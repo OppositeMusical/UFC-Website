@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Settings - UFC Predictor{% endblock %}
+{% block content %}
+<h1 class="page-title">Settings</h1>
+<p class="page-subtitle">Choose your AI provider and keep the fighter database up to date.</p>
+
+<div class="card">
+  <h2>AI Provider</h2>
+  <form id="provider-form">
+    <div class="form-row">
+      <label for="provider-select">Provider</label>
+      <select id="provider-select">
+        {% for p in providers %}
+        <option value="{{ p }}" {{ "selected" if p == active_provider else "" }}>
+          {{ p|capitalize }}{% if p != "ollama" and configured.get(p) %} (key saved){% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-row" id="ollama-row">
+      <label for="ollama-model-select">Local Model</label>
+      <select id="ollama-model-select"></select>
+    </div>
+
+    <div class="form-row" id="api-key-row">
+      <label for="api-key-input">API Key</label>
+      <input type="password" id="api-key-input" placeholder="Paste your API key (leave blank to keep the saved one)" />
+    </div>
+
+    <button type="submit" class="btn">Save</button>
+    <button type="button" class="btn btn--secondary" id="test-connection-btn">Test Connection</button>
+    <span id="save-status" class="page-subtitle" style="margin-left:0.75rem;"></span>
+    <span id="test-status" class="page-subtitle"></span>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Fighter Database</h2>
+  <p class="page-subtitle">
+    {% if last_sync %}Last synced: {{ last_sync }}{% else %}Never synced - predictions won't have real stats until you sync.{% endif %}
+  </p>
+  <p class="page-subtitle">
+    A full sync respects ufc.com's stated crawl rate and can take a long time for the whole roster; it's safe to
+    close the app and resume later - already-scraped fighters are skipped.
+  </p>
+  <button class="btn" id="sync-fighters-btn">Sync Now</button>
+  <span id="sync-status" class="page-subtitle" style="margin-left:0.75rem;"></span>
+
+  <div class="sync-progress" id="sync-progress" hidden>
+    <div class="sync-progress__bar"><span class="sync-progress__fill" id="sync-progress-fill"></span></div>
+    <span class="sync-progress__pct" id="sync-progress-pct">0%</span>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+{% endblock %}

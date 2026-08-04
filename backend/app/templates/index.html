@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - UFC Predictor{% endblock %}
+{% block content %}
+<h1 class="page-title">Dashboard</h1>
+<p class="page-subtitle">Local-first MMA prediction assistant.</p>
+
+<div class="stat-tiles">
+  <div class="stat-tile">
+    <span class="stat-tile__value" data-count-to="{{ db_status.with_stats }}">0</span>
+    <span class="stat-tile__label">Fighters with stats</span>
+  </div>
+  <div class="stat-tile">
+    <span class="stat-tile__value" data-count-to="{{ db_status.total }}">0</span>
+    <span class="stat-tile__label">Fighters known</span>
+  </div>
+  <div class="stat-tile">
+    <span class="stat-tile__value" data-count-to="{{ prediction_count }}">0</span>
+    <span class="stat-tile__label">Predictions made</span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Status</h2>
+  <div class="status-row">
+    <span class="status-chip checking" id="provider-chip" title="Checking AI provider...">
+      <span class="status-dot"></span>
+      <span class="status-chip__text">Checking AI provider...</span>
+    </span>
+    <span class="status-chip {{ db_status.level }}" title="{{ db_status.detail }}">
+      <span class="status-dot"></span>
+      <span class="status-chip__text">{{ db_status.label }}</span>
+    </span>
+  </div>
+  <p class="status-detail" id="provider-detail" hidden></p>
+  {% if db_status.detail and db_status.level != "ok" %}
+    <p class="status-detail">{{ db_status.detail }} <a href="{{ url_for('settings.index') }}">Open Settings</a></p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Recent Predictions</h2>
+  {% if recent_predictions %}
+  <table>
+    <thead>
+      <tr><th>Platform</th><th>Matchup</th><th>Stat</th><th>Line</th><th>Call</th><th>Confidence</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for p in recent_predictions %}
+      <tr>
+        <td>{{ p.platform }}</td>
+        <td>{{ p.fighter_a.name }} vs {{ p.fighter_b.name }}</td>
+        <td>{{ p.stat_category }}</td>
+        <td>{{ p.line_value }}</td>
+        <td><span class="call-pill call-pill--{{ p.direction_predicted }}">{{ p.direction_predicted.upper() }}</span></td>
+        <td>{{ p.confidence_pct }}%</td>
+        <td>{% if p.conversation_id %}<a href="{{ url_for('chat.view_conversation', conversation_id=p.conversation_id) }}">Continue in Chat</a>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty-state">No predictions yet. Try the PrizePicks, DraftKings, or Kalshi pages.</p>
+  {% endif %}
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/status.js') }}"></script>
+{% endblock %}

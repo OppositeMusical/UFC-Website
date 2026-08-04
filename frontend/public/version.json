@@ -1,6 +1,6 @@
 {
   "version": "0.1.0",
-  "downloadUrl": "/downloads/UFC-Predictor-Setup-0.1.0.exe",
+  "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/UFC-Predictor-Setup-0.1.0.exe",
   "fileName": "UFC-Predictor-Setup-0.1.0.exe",
   "kind": "installer",
   "sizeBytes": 186904009,
@@ -11,5 +11,5 @@
     "Kalshi page now takes free-text market questions",
     "Fixed fighter name matching pulling in unrelated namesakes"
   ],
-  "notes": "Served locally out of frontend/public/downloads by `npm run dev` / `npm run build`. For a public release, re-run with --github-release OWNER/REPO after uploading the installer."
+  "notes": "Points at the latest GitHub release of OppositeMusical/UFC-Website. Create that release and upload UFC-Predictor-Setup-0.1.0.exe as an asset, or the link 404s."
 }

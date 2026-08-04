@@ -471,8 +471,28 @@ push users into a "downgrade update".
 ```
 cd frontend
 npm install
-npm run build
+npm run build     # -> frontend/dist
+npm start         # serve dist/ the way production does (server.js)
 ```
+
+**Hosting (Railway).** `frontend/railway.json` sets Nixpacks to
+`npm ci && npm run build` then `npm start`, with `/healthz` as the healthcheck;
+set the service's Root Directory to `frontend`. `frontend/server.js` is a
+dependency-free static server rather than `serve`/express because the only
+things needed beyond sending a file are an SPA fallback and three cache
+policies — `no-store` on `version.json` (it is both the release pointer and the
+update manifest), `immutable` on Vite's fingerprinted `/assets/*`, and
+`no-cache` on `index.html` so a deploy isn't pinned to an old asset graph.
+Extensionless paths fall back to `index.html` so client routes survive a
+refresh; anything with an extension 404s, because handing a broken `.js` a 200
+masks the failure.
+
+**`frontend/public/downloads/` is gitignored**, so a host that builds from the
+repo has `version.json` but no installer behind it. Publish the installer to a
+release host and repoint the manifest
+(`build_release.py --github-release OWNER/REPO`) before deploying. The Download
+page fails safe regardless: it HEAD-checks a relative `downloadUrl` and shows
+"Build not available yet" instead of a button that 404s.
 
 ## 14. Explicitly Out of Scope for the Initial Build Session
 

@@ -1,0 +1,9 @@
+# `railway up` uploads the working directory, which unlike a git deploy is
+# not filtered by .gitignore. Without this, a local build sends the ~180MB
+# installer and the whole dist/ folder over the wire on every deploy.
+downloads/
+public/downloads/
+dist/
+node_modules/
+coverage/
+*.log

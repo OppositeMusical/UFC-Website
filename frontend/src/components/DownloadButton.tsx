@@ -19,6 +19,29 @@ function formatSize(bytes?: number): string | null {
   return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
 }
 
+/**
+ * Confirms a same-origin artifact is actually there before offering it.
+ *
+ * The installer is a ~180MB build artifact and is gitignored, so a deploy
+ * built from the repo (Railway, Netlify, a fresh clone) has a version.json
+ * pointing at /downloads/... with no file behind it. Without this check the
+ * page renders a confident-looking button that 404s - the exact failure the
+ * placeholder-URL guard above exists to prevent.
+ *
+ * Only relative URLs are probed: an absolute one points at a release host
+ * that will refuse a cross-origin HEAD, and a CORS failure is not evidence
+ * the file is missing.
+ */
+async function assetExists(url: string): Promise<boolean> {
+  if (!url.startsWith("/")) return true;
+  try {
+    const res = await fetch(url, { method: "HEAD" });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export default function DownloadButton() {
   const [info, setInfo] = useState<VersionInfo | null>(null);
   const [status, setStatus] = useState<Status>("loading");
@@ -32,13 +55,13 @@ export default function DownloadButton() {
     // survived a rebuild and 404'd on click.
     fetch("/version.json", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
-      .then((data: VersionInfo) => {
+      .then(async (data: VersionInfo) => {
         if (cancelled) return;
         // A downloadUrl still pointing at the placeholder release host is
         // worse than no button: it looks live and 404s on click.
         const isReal = Boolean(data?.downloadUrl) && !data.downloadUrl.includes("your-org");
         setInfo(data);
-        setStatus(isReal ? "ready" : "unavailable");
+        setStatus(isReal && (await assetExists(data.downloadUrl)) ? "ready" : "unavailable");
       })
       .catch(() => {
         if (!cancelled) setStatus("unavailable");

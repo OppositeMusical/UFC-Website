@@ -3,10 +3,20 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import App from "../src/App";
 
-function mockVersionJson(body: unknown, ok = true) {
+/**
+ * Routes by URL: /version.json returns the manifest, anything else is the
+ * HEAD probe DownloadButton makes to confirm the artifact exists.
+ * `assetOk: false` simulates a deploy where the gitignored installer is
+ * absent - which is the normal state on Railway.
+ */
+function mockVersionJson(body: unknown, ok = true, assetOk = true) {
   vi.stubGlobal(
     "fetch",
-    vi.fn(() => Promise.resolve({ ok, json: () => Promise.resolve(body) })) as unknown as typeof fetch
+    vi.fn((url: string) =>
+      String(url).includes("version.json")
+        ? Promise.resolve({ ok, json: () => Promise.resolve(body) })
+        : Promise.resolve({ ok: assetOk, json: () => Promise.resolve({}) })
+    ) as unknown as typeof fetch
   );
 }
 
@@ -205,5 +215,52 @@ describe("macOS download", () => {
 
     expect(await screen.findByText(/Build not available yet/i)).toBeInTheDocument();
     expect(screen.getByText(/Download for macOS/i)).toBeInTheDocument();
+  });
+});
+
+describe("artifact availability", () => {
+  it("hides the button when version.json points at a file that isn't deployed", async () => {
+    // frontend/public/downloads/ is gitignored, so a host that builds from
+    // the repo has the manifest but not the 180MB installer.
+    mockVersionJson(
+      {
+        version: "0.1.0",
+        downloadUrl: "/downloads/UFC-Predictor-Setup-0.1.0.exe",
+        kind: "installer",
+      },
+      true,
+      false
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/download"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Build not available yet/i)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Download Installer/i })).not.toBeInTheDocument();
+  });
+
+  it("trusts absolute URLs without probing them", async () => {
+    // A release host will refuse a cross-origin HEAD; a CORS failure is not
+    // evidence the file is missing, so absolute URLs are taken at face value.
+    mockVersionJson(
+      {
+        version: "0.1.0",
+        downloadUrl: "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/x.exe",
+        kind: "installer",
+      },
+      true,
+      false
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/download"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("link", { name: /Download Installer/i })).toBeInTheDocument();
   });
 });

@@ -52,6 +52,20 @@
     <span class="sync-progress__pct" id="sync-progress-pct">0%</span>
   </div>
 </div>
+
+<div class="card">
+  <h2>App Version</h2>
+  <div class="version-row">
+    <div>
+      <span class="version-current" id="version-current">{{ current_version }}</span>
+      <span class="version-label">Installed</span>
+    </div>
+    <button class="btn btn--secondary" id="check-updates-btn">Check for Updates</button>
+  </div>
+  <p class="status-detail" id="update-status">Checking&hellip;</p>
+  <ul class="release-notes" id="release-notes" hidden></ul>
+  <a class="btn" id="update-download-btn" href="#" target="_blank" rel="noreferrer" hidden>Download the Update</a>
+</div>
 {% endblock %}
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/settings.js') }}"></script>

@@ -27,3 +27,37 @@ document.addEventListener("DOMContentLoaded", () => {
     .then((data) => render(data.level, data.label, data.detail))
     .catch(() => render("err", "Status check failed", "Could not reach the local app server."));
 });
+
+// Update banner. Only ever shown for an actual newer release - "couldn't
+// check" stays silent, because a warning a user can't act on is noise.
+document.addEventListener("DOMContentLoaded", () => {
+  const banner = document.getElementById("update-banner");
+  if (!banner) return;
+
+  const dismissKey = (version) => `ufcpredictor:update-dismissed:${version}`;
+
+  fetch("/api/updates/check")
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status))))
+    .then((data) => {
+      if (data.status !== "available") return;
+      // Dismissal is per-version, so the banner comes back for the next
+      // release instead of being silenced forever by one click.
+      if (localStorage.getItem(dismissKey(data.latestVersion))) return;
+
+      document.getElementById("update-banner-title").textContent =
+        `Version ${data.latestVersion} is available`;
+      document.getElementById("update-banner-detail").textContent =
+        `You're on ${data.currentVersion}.`;
+      document.getElementById("update-banner-link").href =
+        data.downloadPageUrl || data.downloadUrl || "#";
+      banner.hidden = false;
+
+      document.getElementById("update-banner-dismiss").addEventListener("click", () => {
+        localStorage.setItem(dismissKey(data.latestVersion), "1");
+        banner.hidden = true;
+      });
+    })
+    .catch(() => {
+      /* offline is normal for a local-first app - stay quiet */
+    });
+});

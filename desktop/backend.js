@@ -93,13 +93,19 @@ function pollHealth(port, deadline) {
  * diagnosable - without it a Python traceback vanishes and the user just
  * gets "could not start".
  */
-async function startBackend({ isPackaged, resourcesPath, onLog = () => {} }) {
+async function startBackend({ isPackaged, resourcesPath, appVersion, onLog = () => {} }) {
   const port = await getFreePort();
   const { command, args, cwd } = resolveCommand(isPackaged, resourcesPath);
 
-  onLog(`Starting backend: ${command} ${args.join(" ")} (port ${port})`);
+  onLog(`Starting backend: ${command} ${args.join(" ")} (port ${port}, version ${appVersion || "dev"})`);
 
-  child = spawn(command, [...args, "--port", String(port), "--no-browser"], {
+  // --app-version comes from Electron's own package.json, which is what
+  // electron-builder stamps the installer with. Passing it down keeps one
+  // source of truth: the backend never declares a version of its own, so
+  // the two can't drift and report different numbers to the update check.
+  const versionArgs = appVersion ? ["--app-version", appVersion] : [];
+
+  child = spawn(command, [...args, "--port", String(port), "--no-browser", ...versionArgs], {
     cwd,
     env: { ...process.env, UFC_PREDICTOR_NO_BROWSER: "1", PYTHONUNBUFFERED: "1" },
     stdio: ["ignore", "pipe", "pipe"],

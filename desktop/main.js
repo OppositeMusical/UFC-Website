@@ -154,6 +154,10 @@ async function boot() {
     const { url } = await startBackend({
       isPackaged: app.isPackaged,
       resourcesPath: process.resourcesPath,
+      // Only meaningful for an installed build. In dev, app.getVersion()
+      // returns the repo's package.json version, which says nothing about
+      // what the user has installed - so don't pretend it does.
+      appVersion: app.isPackaged ? app.getVersion() : null,
       onLog: log,
     });
     backendUrl = url;

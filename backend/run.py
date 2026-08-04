@@ -27,6 +27,7 @@ from waitress import serve
 
 from app import create_app
 from app.config import Config
+from app.version import set_current_version
 
 READY_PREFIX = "UFC_PREDICTOR_READY"
 
@@ -52,11 +53,21 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=os.environ.get("UFC_PREDICTOR_NO_BROWSER") == "1",
         help="Don't open a browser tab - used when a shell (Electron) provides the window",
     )
+    parser.add_argument(
+        "--app-version",
+        default=os.environ.get("UFC_PREDICTOR_APP_VERSION"),
+        help=(
+            "Version of the installed desktop app, passed by the Electron shell. "
+            "Omitted means a dev run, which disables update checks rather than "
+            "comparing against a made-up version."
+        ),
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> None:
     args = _parse_args(argv)
+    set_current_version(args.app_version)
     host = args.host
     port = args.port or Config.DEFAULT_PORT
     url = f"http://{host}:{port}/"

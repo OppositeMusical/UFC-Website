@@ -788,6 +788,100 @@ tbody tr:nth-child(5) { animation-delay: 0.25s; }
   letter-spacing: 0.06em;
 }
 
+/* ---------- Update banner ---------- */
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.85rem 1.1rem;
+  margin-bottom: 1.5rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--accent-crimson-dim);
+  background: linear-gradient(90deg, rgba(143, 28, 40, 0.28), rgba(143, 28, 40, 0.08));
+  animation: card-in var(--dur-slow) var(--ease-out);
+}
+.update-banner__icon {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-crimson);
+  color: #fff;
+  font-weight: 800;
+  animation: nudge 2.4s ease-in-out infinite;
+}
+@keyframes nudge {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+.update-banner__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: 0.88rem;
+}
+.update-banner__text span {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+.update-banner__dismiss {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.2rem;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.update-banner__dismiss:hover {
+  color: var(--text-primary);
+}
+
+.btn--small {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.78rem;
+}
+
+/* ---------- Version / release notes ---------- */
+.version-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.version-current {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.45rem;
+  font-variant-numeric: tabular-nums;
+}
+.version-label {
+  margin-left: 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.release-notes {
+  margin: 0.9rem 0 1rem;
+  padding-left: 1.1rem;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1.7;
+}
+.release-notes li::marker {
+  color: var(--accent-crimson);
+}
+
 /* ---------- Sync progress ---------- */
 .sync-progress {
   display: flex;

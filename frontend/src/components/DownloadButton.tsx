@@ -9,6 +9,7 @@ interface VersionInfo {
   sizeBytes?: number;
   sha256?: string;
   releasedAt?: string;
+  releaseNotes?: string[];
 }
 
 type Status = "loading" | "ready" | "unavailable";
@@ -90,6 +91,20 @@ export default function DownloadButton() {
         {size ? ` · ${size}` : ""} · Windows 10/11 (64-bit)
       </p>
       <p className="download-card__meta">Desktop app · Fighter database included</p>
+
+      {info.releaseNotes && info.releaseNotes.length > 0 && (
+        <div className="whats-new">
+          <h3>
+            What's new in {info.version}
+            {info.releasedAt ? <span> · {info.releasedAt}</span> : null}
+          </h3>
+          <ul>
+            {info.releaseNotes.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {info.sha256 && (
         <p className="download-card__hash">
           <span>SHA-256</span>

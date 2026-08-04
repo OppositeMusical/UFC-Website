@@ -117,4 +117,62 @@ document.addEventListener("DOMContentLoaded", () => {
         : "Done. Refresh the page to see the updated stats."
     );
   }
+
+  // ---- Updates -------------------------------------------------------
+  const checkBtn = document.getElementById("check-updates-btn");
+  const updateStatus = document.getElementById("update-status");
+  const notesEl = document.getElementById("release-notes");
+  const downloadBtn = document.getElementById("update-download-btn");
+
+  async function checkUpdates(force) {
+    notesEl.hidden = true;
+    notesEl.innerHTML = "";
+    downloadBtn.hidden = true;
+    updateStatus.textContent = force ? "Checking..." : "Checking...";
+    checkBtn.disabled = true;
+
+    try {
+      const data = await apiFetch(`/api/updates/check${force ? "?force=1" : ""}`);
+      renderUpdateStatus(data);
+    } catch (e) {
+      updateStatus.textContent = `Could not check for updates: ${e.message}`;
+    } finally {
+      checkBtn.disabled = false;
+    }
+  }
+
+  function renderUpdateStatus(data) {
+    if (data.status === "available") {
+      updateStatus.textContent = `Version ${data.latestVersion} is available. You're on ${data.currentVersion}.`;
+      // The download page carries the SmartScreen warning and the
+      // checksum, so send people there rather than starting a 180MB
+      // binary download straight from a settings screen.
+      downloadBtn.href = data.downloadPageUrl || data.downloadUrl || "#";
+      downloadBtn.hidden = false;
+
+      const notes = data.releaseNotes || [];
+      if (notes.length) {
+        notes.forEach((note) => {
+          const li = document.createElement("li");
+          li.textContent = note;
+          notesEl.appendChild(li);
+        });
+        notesEl.hidden = false;
+      }
+      return;
+    }
+
+    const messages = {
+      current: `You're on the latest version (${data.currentVersion}).`,
+      dev: data.detail,
+      disabled: data.detail,
+      unknown: data.detail || "Could not reach the update server.",
+    };
+    updateStatus.textContent = messages[data.status] || "Unknown update status.";
+  }
+
+  if (checkBtn) {
+    checkBtn.addEventListener("click", () => checkUpdates(true));
+    checkUpdates(false);
+  }
 });

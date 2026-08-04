@@ -6,5 +6,10 @@
   "sizeBytes": 186904009,
   "sha256": "b6a08e69d90c9cd519e1fb90777b181a23296c6b93bceaa7d80d37e2e46d96cf",
   "releasedAt": "2026-08-04",
+  "releaseNotes": [
+    "Runs as a real desktop app - no more browser tab",
+    "Kalshi page now takes free-text market questions",
+    "Fixed fighter name matching pulling in unrelated namesakes"
+  ],
   "notes": "Served locally out of frontend/public/downloads by `npm run dev` / `npm run build`. For a public release, re-run with --github-release OWNER/REPO after uploading the installer."
 }

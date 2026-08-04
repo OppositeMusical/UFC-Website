@@ -100,6 +100,16 @@ def main() -> None:
             "OppositeMusical/UFC-Website. You still have to create the release and upload the installer."
         ),
     )
+    parser.add_argument(
+        "--notes",
+        action="append",
+        default=[],
+        metavar="LINE",
+        help=(
+            "A release-note bullet; repeat for several. Shown in the app's update prompt and on "
+            "the Download page, so write them for a user deciding whether to bother updating."
+        ),
+    )
     args = parser.parse_args()
 
     if args.download_url and args.github_release:
@@ -140,6 +150,10 @@ def main() -> None:
             "For a public release, re-run with --github-release OWNER/REPO after uploading the installer."
         )
 
+    # Carry forward the previous release's notes only if this run supplied
+    # none - silently reusing them for a different version would be a lie.
+    release_notes = list(args.notes)
+
     version_info = {
         "version": version,
         "downloadUrl": download_url,
@@ -148,6 +162,7 @@ def main() -> None:
         "sizeBytes": size_bytes,
         "sha256": checksum,
         "releasedAt": dt.date.today().isoformat(),
+        "releaseNotes": release_notes,
         "notes": note,
     }
     version_path = PUBLIC_DIR / "version.json"

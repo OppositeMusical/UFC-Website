@@ -568,6 +568,34 @@ a {
   flex-direction: column;
   align-items: center;
 }
+
+/* The unavailable platform is visibly secondary - no sheen, dimmer, so it
+   never competes with the build people can actually install. */
+.download-card--soon {
+  padding: 1.6rem 2rem;
+  opacity: 0.72;
+  box-shadow: none;
+  transition: opacity var(--dur-mid) var(--ease-out);
+}
+.download-card--soon::before {
+  display: none;
+}
+.download-card--soon:hover {
+  opacity: 1;
+}
+
+.soon-badge {
+  display: inline-block;
+  padding: 0.18rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(224, 167, 46, 0.45);
+  background: rgba(224, 167, 46, 0.12);
+  color: var(--amber);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
 .download-card__version {
   color: var(--text-faint);
   font-size: 0.85rem;
@@ -586,6 +614,38 @@ a {
   margin: 0.3rem 0 0;
   font-size: 0.78rem;
   color: var(--text-muted);
+}
+
+/* Release notes - left-aligned inside the otherwise centred download card,
+   because a bulleted list centred on the page is unreadable. */
+.whats-new {
+  margin: 1.6rem auto 0;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--border-subtle);
+  max-width: 34rem;
+  text-align: left;
+}
+.whats-new h3 {
+  margin: 0 0 0.6rem;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.82rem;
+}
+.whats-new h3 span {
+  color: var(--text-faint);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.whats-new ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1.75;
+}
+.whats-new li::marker {
+  color: var(--accent-crimson);
 }
 
 /* Full hash, wrapped - a truncated checksum can't be verified against. */

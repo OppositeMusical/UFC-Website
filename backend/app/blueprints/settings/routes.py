@@ -17,6 +17,7 @@ from app.services.ai.factory import PROVIDER_NAMES, build_provider
 from app.services.ai.ollama_provider import OllamaProvider
 from app.services.db.session import get_setting, set_setting
 from app.services.secrets import secret_manager
+from app.version import get_current_version
 
 bp = Blueprint("settings", __name__, url_prefix="/settings")
 
@@ -40,6 +41,7 @@ def index():
         active_ollama_model=active_ollama_model,
         configured=configured,
         last_sync=last_sync,
+        current_version=get_current_version(),
     )
 
 

@@ -58,6 +58,44 @@ The installer is large (~380MB: Electron runtime + the Python bundle +
 the 28MB seeded fighter database). That is the cost of shipping a Python
 app to machines with no Python.
 
+## Versioning and updates
+
+`desktop/package.json`'s `version` is the **single source of truth**.
+electron-builder stamps the installer from it, `main.js` passes it to the
+backend as `--app-version`, and `build_release.py` reads it back off the
+installer filename. The Python side declares no version of its own, so the
+two cannot drift and report different numbers.
+
+Cutting a release:
+
+```powershell
+python backend\scripts\set_version.py 0.2.0   # bumps package.json
+cd backend   ; pyinstaller pyinstaller/app.spec
+cd ..\desktop ; npm run dist
+cd ..\backend ; python scripts\build_release.py --notes "What changed" --notes "And this"
+```
+
+Installed copies check `Config.UPDATE_MANIFEST_URL` (the same
+`version.json` the Download page reads) at most every 6 hours, and show a
+banner on the dashboard plus a section in Settings when something newer
+exists. Publishing the manifest is the only step needed to announce a
+release - there is no separate update feed.
+
+**The app never self-updates.** It links the user to the download page so
+they run the installer themselves. Auto-replacing an executable on someone's
+machine is a much bigger trust ask than this app needs to make, and the
+download page is where the SmartScreen warning and checksum live.
+
+Point the check somewhere else for testing:
+
+```powershell
+$env:UFC_PREDICTOR_UPDATE_URL = "http://localhost:5174/version.json"
+$env:UFC_PREDICTOR_DOWNLOAD_PAGE_URL = "http://localhost:5174/download"
+```
+
+A dev run (no `--app-version`) reports `0.0.0-dev` and skips the check
+entirely rather than comparing against a made-up version.
+
 ## How it fits together
 
 | File | Role |

@@ -18,6 +18,8 @@ beforeEach(() => {
     kind: "installer",
     sizeBytes: 186904009,
     sha256: "b6a08e69d90c9cd519e1fb90777b181a23296c6b93bceaa7d80d37e2e46d96cf",
+    releasedAt: "2026-08-04",
+    releaseNotes: ["Runs as a real desktop app", "Kalshi market questions"],
   });
 });
 
@@ -141,5 +143,67 @@ describe("DownloadButton", () => {
     );
 
     expect(await screen.findByText(/Build not available yet/i)).toBeInTheDocument();
+  });
+});
+
+describe("release notes", () => {
+  it("shows what's new for the published version", async () => {
+    render(
+      <MemoryRouter initialEntries={["/download"]}>
+        <App />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText(/What's new in 0\.1\.0/)).toBeInTheDocument();
+    expect(screen.getByText("Runs as a real desktop app")).toBeInTheDocument();
+    expect(screen.getByText("Kalshi market questions")).toBeInTheDocument();
+  });
+
+  it("omits the section entirely when a release has no notes", async () => {
+    mockVersionJson({
+      version: "0.1.0",
+      downloadUrl: "/downloads/UFC-Predictor-Setup-0.1.0.exe",
+      kind: "installer",
+      sizeBytes: 186904009,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/download"]}>
+        <App />
+      </MemoryRouter>
+    );
+    await screen.findByRole("link", { name: /Download Installer/i });
+    expect(screen.queryByText(/What's new/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("macOS download", () => {
+  it("is shown as coming soon and is not clickable", async () => {
+    render(
+      <MemoryRouter initialEntries={["/download"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    const mac = await screen.findByText(/Download for macOS/i);
+    expect(mac).toBeInTheDocument();
+    expect(screen.getByText(/Coming soon/i)).toBeInTheDocument();
+
+    // Deliberately not a link: there is nothing to download, and a dead
+    // href would look available and fail on click.
+    expect(screen.queryByRole("link", { name: /Download for macOS/i })).not.toBeInTheDocument();
+    expect(mac.closest("[aria-disabled]")).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("still appears when the Windows build is unavailable", async () => {
+    mockVersionJson({}, false);
+
+    render(
+      <MemoryRouter initialEntries={["/download"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Build not available yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/Download for macOS/i)).toBeInTheDocument();
   });
 });

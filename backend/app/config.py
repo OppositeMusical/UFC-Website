@@ -56,6 +56,20 @@ class Config:
     UFC_CRAWL_DELAY_SECONDS = 15
     OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 
+    # Where installed copies look for a newer release. This is the same
+    # version.json the Download page reads, served straight from the repo so
+    # publishing a release is the only step needed to announce it. Override
+    # both when the site moves to its own domain, or to test locally against
+    # a dev server.
+    UPDATE_MANIFEST_URL = os.environ.get(
+        "UFC_PREDICTOR_UPDATE_URL",
+        "https://raw.githubusercontent.com/OppositeMusical/UFC-Website/main/frontend/public/version.json",
+    )
+    DOWNLOAD_PAGE_URL = os.environ.get(
+        "UFC_PREDICTOR_DOWNLOAD_PAGE_URL",
+        "https://github.com/OppositeMusical/UFC-Website/releases/latest",
+    )
+
 
 class TestConfig(Config):
     TESTING = True

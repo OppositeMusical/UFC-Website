@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from flask import Blueprint, jsonify, render_template
+from flask import Blueprint, jsonify, render_template, request
 from sqlalchemy.orm import joinedload
 
 from app.extensions import Session
 from app.models.prediction import Prediction
 from app.services.status import fighter_db_status, provider_status
+from app.services.updates import check_for_update
+from app.version import get_current_version
 
 bp = Blueprint("main", __name__)
 
@@ -42,6 +44,15 @@ def dashboard():
 @bp.route("/api/status/provider")
 def api_provider_status():
     return jsonify(provider_status())
+
+
+@bp.route("/api/updates/check")
+def api_check_updates():
+    # ?force=1 bypasses the 6h cache, for the explicit "Check now" button in
+    # Settings - a user who just published a release shouldn't have to wait
+    # out the cache to see it.
+    force = request.args.get("force") == "1"
+    return jsonify(check_for_update(force=force))
 
 
 @bp.route("/health")

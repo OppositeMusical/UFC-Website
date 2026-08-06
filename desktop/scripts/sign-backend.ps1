@@ -37,12 +37,31 @@ foreach ($p in @($pfx, $target, $signtool)) {
     if (-not (Test-Path $p)) { throw "Missing: $p" }
 }
 
-# Staleness guard. electron-builder copies dist/ in verbatim and cannot tell
-# the Python source moved on, so a bundle built before run.py grew a flag
-# still packages cleanly - and then dies at runtime when main.js passes it.
-# That has now happened twice (--port, then --app-version), and the symptom
-# both times was a window that never appears, which points at Electron
-# rather than at a stale build. Assert the contract here instead.
+# Staleness guard, part 1: is anything under backend/ newer than the bundle?
+#
+# electron-builder copies dist/ in verbatim and cannot tell the source moved
+# on. The flag check below only catches changes to run.py's CLI - it sails
+# straight past edited templates, CSS and JS, which PyInstaller also bundles.
+# That gap nearly shipped a release whose bundled autocomplete still had a
+# bug fixed hours earlier in the repo, because the fix was in a .js file.
+$bundleTime = (Get-Item $target).LastWriteTimeUtc
+$sourceRoot = Join-Path $repoRoot "backend"
+$newer = Get-ChildItem -Path (Join-Path $sourceRoot "app"), (Join-Path $sourceRoot "run.py") -Recurse -File `
+    -Include *.py, *.js, *.css, *.html -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -notmatch '\\__pycache__\\' -and $_.LastWriteTimeUtc -gt $bundleTime }
+
+if ($newer) {
+    $list = ($newer | Select-Object -First 8 | ForEach-Object { "  " + $_.FullName.Replace("$sourceRoot\", "") }) -join "`n"
+    throw "These files are newer than the bundled exe:`n$list`n`n" +
+          "The bundle would ship stale code. Rebuild it first:`n" +
+          "  cd backend; pyinstaller pyinstaller/app.spec"
+}
+Write-Host "Freshness check passed: no backend source newer than the bundle."
+
+# Staleness guard, part 2: does the bundle understand the flags main.js
+# passes? Catches the case where mtimes look fine but the exe predates a CLI
+# change - the symptom is a window that never appears, which misleadingly
+# points at Electron rather than at the build.
 $requiredFlags = @("--port", "--no-browser", "--app-version")
 $usage = (& $target --help 2>&1) -join "`n"
 $missing = $requiredFlags | Where-Object { $usage -notmatch [regex]::Escape($_) }

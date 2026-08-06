@@ -1,15 +1,16 @@
 {
-  "version": "0.1.0",
-  "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/UFC-Predictor-Setup-0.1.0.exe",
-  "fileName": "UFC-Predictor-Setup-0.1.0.exe",
-  "kind": "installer",
-  "sizeBytes": 186904009,
-  "sha256": "b6a08e69d90c9cd519e1fb90777b181a23296c6b93bceaa7d80d37e2e46d96cf",
-  "releasedAt": "2026-08-04",
+  "version": "0.2.0",
+  "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/UFC-Predictor-0.2.0-portable-win64.zip",
+  "fileName": "UFC-Predictor-0.2.0-portable-win64.zip",
+  "kind": "portable",
+  "sizeBytes": 243864871,
+  "sha256": "4d3efd6280ba0dfd7b5407a82169879ecbd92e38af9f8d89044dca29d64bce5f",
+  "releasedAt": "2026-08-06",
   "releaseNotes": [
-    "Runs as a real desktop app - no more browser tab",
-    "Kalshi page now takes free-text market questions",
-    "Fixed fighter name matching pulling in unrelated namesakes"
+    "Portable build - extract anywhere, no installation",
+    "Fighter database and chat history live in a data folder beside the app",
+    "Choose-folder download on Chrome and Edge",
+    "Builds are now code-signed"
   ],
-  "notes": "Points at the latest GitHub release of OppositeMusical/UFC-Website. Create that release and upload UFC-Predictor-Setup-0.1.0.exe as an asset, or the link 404s."
+  "notes": "Points at the latest GitHub release of OppositeMusical/UFC-Website. Create that release and upload UFC-Predictor-0.2.0-portable-win64.zip as an asset, or the link 404s."
 }

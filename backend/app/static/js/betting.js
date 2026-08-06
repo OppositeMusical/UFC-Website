@@ -18,7 +18,9 @@ document.addEventListener("DOMContentLoaded", () => {
     vsRow.classList.toggle("is-ready", Boolean(fighterAId.value && fighterBId.value));
   }
   formEl.addEventListener("input", refreshReadyState);
-  formEl.addEventListener("click", refreshReadyState);
+  // Picking from the dropdown emits a custom event rather than a native
+  // "input" one - see the note in common.js::select().
+  formEl.addEventListener("autocomplete:select", refreshReadyState);
 
   const resultEl = document.getElementById("prediction-result");
   const loadingEl = document.getElementById("prediction-loading");

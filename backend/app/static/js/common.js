@@ -113,8 +113,13 @@ function attachAutocomplete(inputEl, resultsEl, hiddenIdEl) {
     inputEl.value = fighter.name;
     hiddenIdEl.value = fighter.id;
     close();
-    // Let the page react to a completed selection (see betting.js).
-    inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+
+    // A CUSTOM event, never a native "input" one. The handler above clears
+    // hiddenIdEl on every input - correct, since typing after choosing must
+    // invalidate the choice - so dispatching "input" here wiped the id
+    // microseconds after setting it and every submit failed with "pick both
+    // fighters from the dropdown" even though one had just been picked.
+    inputEl.dispatchEvent(new CustomEvent("autocomplete:select", { bubbles: true, detail: fighter }));
   }
 
   function close() {

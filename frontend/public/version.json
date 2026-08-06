@@ -1,16 +1,16 @@
 {
-  "version": "0.2.0",
-  "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/UFC-Predictor-0.2.0-portable-win64.zip",
-  "fileName": "UFC-Predictor-0.2.0-portable-win64.zip",
+  "version": "0.3.0",
+  "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/MMA-Assist-0.3.0-portable-win64.zip",
+  "fileName": "MMA-Assist-0.3.0-portable-win64.zip",
   "kind": "portable",
-  "sizeBytes": 243864871,
-  "sha256": "4d3efd6280ba0dfd7b5407a82169879ecbd92e38af9f8d89044dca29d64bce5f",
+  "sizeBytes": 243867804,
+  "sha256": "28058b4bb4acea6e3b3ad0cc92c165c800991ed3de6e307c0d13daf850856832",
   "releasedAt": "2026-08-06",
   "releaseNotes": [
-    "Portable build - extract anywhere, no installation",
-    "Fighter database and chat history live in a data folder beside the app",
+    "Renamed to MMA Assist throughout the app and site",
+    "Portable build - extract anywhere, data lives beside the app",
     "Choose-folder download on Chrome and Edge",
-    "Builds are now code-signed"
+    "Builds are code-signed"
   ],
-  "notes": "Points at the latest GitHub release of OppositeMusical/UFC-Website. Create that release and upload UFC-Predictor-0.2.0-portable-win64.zip as an asset, or the link 404s."
+  "notes": "Points at the latest GitHub release of OppositeMusical/UFC-Website. Create that release and upload MMA-Assist-0.3.0-portable-win64.zip as an asset, or the link 404s."
 }

@@ -15,12 +15,27 @@
     downloading from the internet still sees "Windows protected your PC".
     Only a purchased (ideally EV) certificate changes that.
 
+.NOTES
+    Replacing an existing cert is a two-part job: create the new one AND
+    untrust/delete the old one. A superseded root left in the trust store
+    still vouches for anything signed with its key, and that key is sitting
+    in an exportable .pfx - so leaving it behind is pure liability for no
+    benefit. `trust-cert.ps1 -Remove` handles the trust side; delete the
+    stale key from Cert:\CurrentUser\My too.
+
+    Already-published builds keep validating against the old cert because
+    their signatures are RFC3161-timestamped - the timestamp proves they
+    were signed while that cert was live, so expiry or replacement does not
+    invalidate them. Only machines that never trusted the old root are
+    affected, and they were seeing "Unknown Publisher" anyway.
+
 .EXAMPLE
     .\scripts\new-signing-cert.ps1 -Password "choose-something"
 #>
 [CmdletBinding()]
 param(
-    [string]$Subject = "CN=OppositeMusical, O=UFC Predictor, C=US",
+    # CN is the publisher shown in the UAC prompt; O is the product/org.
+    [string]$Subject = "CN=OppositeMusical, O=MMA Assist, C=US",
     [Parameter(Mandatory = $true)][string]$Password,
     [int]$Years = 3
 )

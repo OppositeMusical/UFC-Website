@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Hardened Runtime entitlements. Apple requires the hardened runtime for
+  notarization, and it blocks several things Electron and a bundled Python
+  interpreter need by default. Each entry below is here because omitting it
+  breaks the app, not as a precaution:
+
+  - allow-jit / allow-unsigned-executable-memory / allow-dyld-environment-
+    variables: V8 compiles JavaScript at runtime. Without these the renderer
+    crashes immediately on launch.
+  - disable-library-validation: the app spawns the PyInstaller-built backend,
+    which loads its own bundled .so/.dylib files (onnxruntime, tokenizers,
+    sqlite). Library validation would refuse to load anything not signed with
+    the same team ID as the parent.
+  - cs.debugger is deliberately NOT present - it would let any process attach
+    to this one.
+
+  There is no network entitlement because those only apply under App Sandbox,
+  which this app does not use (it is distributed directly, not via the App
+  Store). The backend binds 127.0.0.1 and the AI providers are outbound HTTPS.
+-->
+<plist version="1.0">
+  <dict>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+  </dict>
+</plist>

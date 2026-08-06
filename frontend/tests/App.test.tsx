@@ -350,3 +350,47 @@ describe("folder picker", () => {
     expect(link).toHaveAttribute("download");
   });
 });
+
+describe("macOS download", () => {
+  it("stays 'coming soon' while no mac artifact is published", async () => {
+    // The default mock has only a Windows entry. The card must not advertise
+    // a build that does not exist.
+    render(
+      <MemoryRouter initialEntries={["/download"]}>
+        <App />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText(/Download for macOS/i)).toBeInTheDocument();
+    expect(screen.getByText(/Coming soon/i)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Download for macOS/i })).not.toBeInTheDocument();
+  });
+
+  it("becomes a real download once version.json carries a mac artifact", async () => {
+    mockVersionJson({
+      version: "0.4.0",
+      downloadUrl: "/downloads/MMA-Assist-0.4.0-portable-win64.zip",
+      kind: "portable",
+      platforms: {
+        win: { downloadUrl: "/downloads/MMA-Assist-0.4.0-portable-win64.zip", kind: "portable" },
+        mac: {
+          downloadUrl: "https://example.test/MMA-Assist-0.4.0-macos.dmg",
+          kind: "dmg",
+          sizeBytes: 243867732,
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/download"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    const link = await screen.findByRole("link", { name: /Download for macOS/i });
+    expect(link).toHaveAttribute("href", "https://example.test/MMA-Assist-0.4.0-macos.dmg");
+    expect(screen.getByText(/macOS 11 or later/)).toBeInTheDocument();
+    // Gatekeeper refuses unsigned downloads outright and calls them
+    // "damaged" - saying so is what stops users deleting a working file.
+    expect(screen.getByText(/damaged and can't be opened/i)).toBeInTheDocument();
+  });
+});

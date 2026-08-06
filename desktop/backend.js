@@ -33,29 +33,42 @@ function getFreePort() {
 }
 
 /**
- * Where the app keeps its data (SQLite + ChromaDB), for a portable build.
+ * Where the app keeps its data (SQLite + ChromaDB).
  *
- * The whole point of shipping portable is that the app and its data travel
- * together: extract the folder anywhere, run it, and everything lives
- * beside the exe. Delete the folder and nothing is left behind.
+ * Deliberately different per platform, because "portable" is a Windows
+ * idea and forcing it onto macOS would be actively wrong:
  *
- * Precedence:
- *   1. An existing UFC_PREDICTOR_DATA_DIR wins - that's how tests and dev
- *      runs point somewhere specific, and silently overriding it would make
- *      those unreproducible.
- *   2. Packaged: <folder containing the exe>/data
- *   3. Anything else: null, meaning the backend falls back to %LOCALAPPDATA%.
+ *   1. An existing UFC_PREDICTOR_DATA_DIR always wins - that's how tests
+ *      and dev runs point somewhere specific, and silently overriding it
+ *      would make those unreproducible.
+ *   2. macOS, packaged: ~/Library/Application Support (Electron's
+ *      userData). See the note at the branch for why not beside the app.
+ *   3. Windows, packaged: <folder containing the exe>/data, so the app and
+ *      its data travel together and deleting the folder removes both.
+ *   4. Anything else: null, and the backend falls back to its own default
+ *      (platformdirs user data dir).
  *
- * Returns null rather than throwing when the location isn't usable. A user
+ * Returns null rather than throwing when a location isn't usable. A user
  * who extracts into Program Files, a read-only share, or a mounted image
- * should still get a working app in AppData, not a startup failure - the
- * data is re-seeded from the bundle anyway, so nothing is lost.
+ * should still get a working app, not a startup failure - the data
+ * re-seeds from the bundle, so nothing is lost.
  */
-function resolveDataDir(isPackaged) {
+function resolveDataDir(isPackaged, userDataDir = null) {
   const explicit = process.env.UFC_PREDICTOR_DATA_DIR;
   if (explicit && explicit.trim()) return { dir: explicit, source: "environment" };
 
   if (!isPackaged) return { dir: null, source: "default (dev run)" };
+
+  // macOS does not do portable. A packaged app is a signed .app bundle and
+  // process.execPath points *inside* it (Contents/MacOS/...), so writing a
+  // data folder beside the binary would put user data inside the bundle -
+  // which breaks the code signature, is wiped by any update that replaces
+  // the .app, and fails outright in /Applications for a non-admin user.
+  // ~/Library/Application Support is the platform convention, and Electron
+  // hands it to us as userData.
+  if (process.platform === "darwin") {
+    return { dir: userDataDir, source: "macOS (~/Library/Application Support)" };
+  }
 
   // process.execPath is the Electron exe the user launched, so its parent is
   // the folder they extracted the app into. electron-builder's own portable
@@ -86,7 +99,9 @@ function resolveDataDir(isPackaged) {
  */
 function resolveCommand(isPackaged, resourcesPath) {
   if (isPackaged) {
-    const exe = path.join(resourcesPath, "backend", "UFCPredictor.exe");
+    // PyInstaller drops the .exe suffix on POSIX.
+    const binary = process.platform === "win32" ? "UFCPredictor.exe" : "UFCPredictor";
+    const exe = path.join(resourcesPath, "backend", binary);
     if (!fs.existsSync(exe)) {
       throw new Error(
         `Packaged backend missing at ${exe}. Run \`pyinstaller pyinstaller/app.spec\` in backend/ before building.`
@@ -138,11 +153,11 @@ function pollHealth(port, deadline) {
  * diagnosable - without it a Python traceback vanishes and the user just
  * gets "could not start".
  */
-async function startBackend({ isPackaged, resourcesPath, appVersion, onLog = () => {} }) {
+async function startBackend({ isPackaged, resourcesPath, appVersion, userDataDir = null, onLog = () => {} }) {
   const port = await getFreePort();
   const { command, args, cwd } = resolveCommand(isPackaged, resourcesPath);
 
-  const { dir: dataDir, source: dataSource } = resolveDataDir(isPackaged);
+  const { dir: dataDir, source: dataSource } = resolveDataDir(isPackaged, userDataDir);
 
   onLog(`Starting backend: ${command} ${args.join(" ")} (port ${port}, version ${appVersion || "dev"})`);
   onLog(`Data directory: ${dataDir || "%LOCALAPPDATA%"} [${dataSource}]`);

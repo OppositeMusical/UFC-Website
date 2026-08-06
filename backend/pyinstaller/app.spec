@@ -15,6 +15,7 @@ in docs/SPEC.md) can find/restore it in the packaged environment - otherwise
 RAG silently has nothing to embed against on an offline install.
 """
 import os
+import sys
 
 from PyInstaller.utils.hooks import collect_all
 
@@ -30,14 +31,22 @@ datas = [
     (os.path.join(BACKEND_DIR, "app", "seed_data"), os.path.join("app", "seed_data")),
 ]
 binaries = []
-hiddenimports = [
-    # keyring's backend auto-discovery relies on importlib.metadata entry
-    # points, which aren't reliably preserved in a frozen build - the app
-    # already imports this explicitly at runtime (see
-    # app/services/secrets/keyring_store.py), but list it here too as a
-    # belt-and-suspenders hint to PyInstaller's static analysis.
-    "keyring.backends.Windows",
-]
+
+# keyring's backend auto-discovery relies on importlib.metadata entry points,
+# which aren't reliably preserved in a frozen build - the app already imports
+# the right one explicitly at runtime (see
+# app/services/secrets/keyring_store.py), but list it here too as a
+# belt-and-suspenders hint to PyInstaller's static analysis.
+#
+# Only the host platform's backend is listed: PyInstaller runs on the machine
+# it targets (it cannot cross-compile), so pulling in the other platform's
+# backend would just fail to import.
+if sys.platform == "darwin":
+    hiddenimports = ["keyring.backends.macOS"]
+elif sys.platform == "win32":
+    hiddenimports = ["keyring.backends.Windows"]
+else:
+    hiddenimports = ["keyring.backends.SecretService"]
 
 # chromadb pulls in onnxruntime and tokenizers via dynamic imports that
 # static analysis alone won't catch - collect_all is the documented fix.

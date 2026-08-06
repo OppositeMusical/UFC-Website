@@ -1,15 +1,26 @@
 import { useEffect, useState } from "react";
 
-interface VersionInfo {
-  version: string;
+export interface PlatformArtifact {
   downloadUrl: string;
-  /** "installer" = the Electron desktop build; anything else is a raw archive. */
+  /** "portable" = Windows zip; "dmg" = macOS disk image. */
   kind?: string;
   fileName?: string;
   sizeBytes?: number;
   sha256?: string;
+}
+
+interface VersionInfo extends PlatformArtifact {
+  version: string;
+  downloadUrl: string;
   releasedAt?: string;
   releaseNotes?: string[];
+  /**
+   * Per-platform artifacts. The Windows entry is ALSO duplicated at the top
+   * level, because installed copies poll this same file for updates and read
+   * downloadUrl/sha256 from the root - moving them would break every client
+   * already shipped.
+   */
+  platforms?: Record<string, PlatformArtifact>;
 }
 
 type Status = "loading" | "ready" | "unavailable";

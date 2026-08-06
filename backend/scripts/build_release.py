@@ -40,15 +40,16 @@ PUBLIC_DIR = REPO_ROOT / "frontend" / "public"
 DOWNLOADS_DIR = PUBLIC_DIR / "downloads"
 
 
-def find_artifact(version: str | None) -> tuple[Path, str]:
-    """Locates the electron-builder portable zip and the version it encodes.
+def find_artifact(version: str | None, platform: str = "win") -> tuple[Path, str]:
+    """Locates the electron-builder artifact for a platform, and its version.
 
-    The app ships portable: a zip the user extracts wherever they like, with
-    the app writing its data into a `data/` folder beside the exe. There is
-    no installer, so nothing lands in Program Files or AppData.
+    Windows ships a portable zip the user extracts wherever they like, with
+    the app writing its data into a `data/` folder beside the exe. macOS
+    ships a .dmg and keeps data in ~/Library/Application Support - a signed
+    .app bundle cannot host its own data folder (see macos/README.md).
 
-    electron-builder names it "UFC Predictor-1.2.3-win.zip" - spaces and all
-    - which is awkward in a URL, so the published copy gets renamed.
+    electron-builder names these with spaces - "MMA Assist-1.2.3-win.zip" -
+    which is awkward in a URL, so the published copy gets renamed.
     """
     if not RELEASE_DIR.exists():
         sys.exit(
@@ -57,13 +58,29 @@ def find_artifact(version: str | None) -> tuple[Path, str]:
             "in backend/ before that, so the package wraps a current backend)."
         )
 
-    candidates = sorted(
-        RELEASE_DIR.glob("*.zip"),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    )
+    if platform == "mac":
+        # .dmg first: it is what a Mac user expects to download. The .zip
+        # electron-builder also emits exists for auto-update, not for humans.
+        patterns = ("*.dmg", "*-mac.zip", "*-arm64.zip")
+    else:
+        patterns = ("*-win.zip", "*.zip")
+
+    candidates: list[Path] = []
+    for pattern in patterns:
+        candidates = sorted(RELEASE_DIR.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True)
+        if platform == "win":
+            # Don't let a mac artifact satisfy a Windows publish when both
+            # are sitting in release/ - that would put a .dmg behind the
+            # "Download for Windows" button.
+            candidates = [c for c in candidates if "mac" not in c.stem and "arm64" not in c.stem]
+        if candidates:
+            break
+
     if not candidates:
-        sys.exit(f"No portable zip in {RELEASE_DIR}. Did `npm run dist` finish?")
+        sys.exit(
+            f"No {platform} artifact in {RELEASE_DIR} (looked for {', '.join(patterns)}).\n"
+            + ("Run ./macos/build.sh on a Mac." if platform == "mac" else "Did `npm run dist` finish?")
+        )
 
     artifact = candidates[0]
     if version:
@@ -104,6 +121,16 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--platform",
+        choices=("win", "mac"),
+        default="win",
+        help=(
+            "Which platform's artifact to publish (default: win). The two are built on "
+            "different machines, so each run merges into version.json rather than "
+            "replacing it - publishing mac must not wipe the Windows entry."
+        ),
+    )
+    parser.add_argument(
         "--notes",
         action="append",
         default=[],
@@ -118,17 +145,22 @@ def main() -> None:
     if args.download_url and args.github_release:
         sys.exit("Use either --download-url or --github-release, not both.")
 
-    artifact, version = find_artifact(args.version)
+    artifact, version = find_artifact(args.version, args.platform)
 
     DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
     if not args.keep_old:
-        # Otherwise every version ever published keeps getting copied into
-        # frontend/dist by `npm run build`.
-        for stale in list(DOWNLOADS_DIR.glob("*.exe")) + list(DOWNLOADS_DIR.glob("*.zip")):
+        # Only this platform's stale artifacts. Clearing everything would
+        # delete the other platform's published file, which is built on a
+        # different machine and cannot be regenerated here.
+        stale_glob = "*-mac*" if args.platform == "mac" else "*-win*"
+        for stale in DOWNLOADS_DIR.glob(stale_glob):
             print(f"Removing old {stale.name}")
             stale.unlink()
 
-    asset_name = f"MMA-Assist-{version}-portable-win64.zip"
+    if args.platform == "mac":
+        asset_name = f"MMA-Assist-{version}-macos{artifact.suffix}"
+    else:
+        asset_name = f"MMA-Assist-{version}-portable-win64.zip"
     dest = DOWNLOADS_DIR / asset_name
     print(f"Copying {artifact.name} -> {dest.relative_to(REPO_ROOT)}")
     shutil.copyfile(artifact, dest)
@@ -153,22 +185,49 @@ def main() -> None:
             "For a public release, re-run with --github-release OWNER/REPO after uploading the installer."
         )
 
-    # Carry forward the previous release's notes only if this run supplied
-    # none - silently reusing them for a different version would be a lie.
-    release_notes = list(args.notes)
+    entry = {
+        "downloadUrl": download_url,
+        "fileName": asset_name,
+        "kind": "dmg" if args.platform == "mac" else "portable",
+        "sizeBytes": size_bytes,
+        "sha256": checksum,
+    }
+
+    version_path = PUBLIC_DIR / "version.json"
+    existing = {}
+    if version_path.exists():
+        try:
+            existing = json.loads(version_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            existing = {}
+
+    # Merge, don't replace. Windows and macOS artifacts are produced on
+    # separate machines, so a mac publish must leave the Windows entry alone
+    # - it cannot be regenerated from here.
+    platforms = dict(existing.get("platforms") or {})
+    # A platform entry from an older version is stale the moment the version
+    # moves on: it would advertise a download that no longer matches.
+    if existing.get("version") != version:
+        platforms = {}
+    platforms[args.platform] = entry
 
     version_info = {
         "version": version,
-        "downloadUrl": download_url,
-        "fileName": asset_name,
-        "kind": "portable",
-        "sizeBytes": size_bytes,
-        "sha256": checksum,
         "releasedAt": dt.date.today().isoformat(),
-        "releaseNotes": release_notes,
+        # Reuse the previous notes only when this run supplied none AND the
+        # version is unchanged - carrying them into a new version would lie
+        # about what changed.
+        "releaseNotes": list(args.notes)
+            or (existing.get("releaseNotes", []) if existing.get("version") == version else []),
+        "platforms": platforms,
         "notes": note,
     }
-    version_path = PUBLIC_DIR / "version.json"
+
+    # Windows also stays at the top level. Installed copies poll this same
+    # file for updates and read downloadUrl/sha256 from the root, so moving
+    # them under "platforms" would break every already-shipped client.
+    version_info.update(platforms.get("win", {}))
+
     version_path.write_text(json.dumps(version_info, indent=2) + "\n", encoding="utf-8")
 
     print(f"Wrote {dest}  ({size_bytes / (1024 * 1024):.1f} MB)")

@@ -171,6 +171,9 @@ async function boot() {
       // returns the repo's package.json version, which says nothing about
       // what the user has installed - so don't pretend it does.
       appVersion: app.isPackaged ? app.getVersion() : null,
+      // macOS keeps user data in ~/Library/Application Support rather
+      // than beside the app - Electron resolves that path for us.
+      userDataDir: app.getPath("userData"),
       onLog: log,
     });
     backendUrl = url;
@@ -190,8 +193,19 @@ async function boot() {
 
 if (hasSingleInstanceLock) app.whenReady().then(boot);
 
+// On Windows, closing the window means quitting. On macOS it does not: apps
+// stay alive in the Dock with no windows open, and quitting on close would
+// read as the app crashing. Keeping the process alive also keeps the backend
+// warm, so re-opening is instant instead of another cold Python start.
 app.on("window-all-closed", () => {
-  app.quit();
+  if (process.platform !== "darwin") app.quit();
+});
+
+// macOS: clicking the Dock icon with no windows open should reopen one.
+// backendUrl is already known, so this skips straight past the splash and
+// the health poll.
+app.on("activate", () => {
+  if (mainWindow === null && backendUrl && !quitting) createMainWindow(backendUrl);
 });
 
 // Every exit path funnels through here so the Python process can't outlive

@@ -19,6 +19,14 @@ frontend/tsconfig.tsbuildinfo
 # Electron shell build output
 desktop/release/
 
+# Code-signing material. The .pfx contains the PRIVATE KEY - anyone who has
+# it can sign anything as this publisher, and on a machine that trusts the
+# root cert that software runs without a warning. Never commit it.
+desktop/certs/
+*.pfx
+*.p12
+*.snk
+
 # App data (never commit user data dirs if run from repo root during dev)
 .secrets.enc
 .secrets.key

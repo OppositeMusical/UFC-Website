@@ -23,16 +23,16 @@ Two decoupled deliverables:
 │  - Download              │        │  │ desktop/  Electron shell                 │  │
 │  - About (placeholder)   │        │  │   main.js    window, menu, lifecycle     │  │
 │                          │        │  │   backend.js spawn + /health + teardown  │  │
-│  Serves:                 │installs│  └───────────────┬──────────────────────────┘  │
+│  Serves:                 │download│  └───────────────┬──────────────────────────┘  │
 │   version.json ──────────┼───────▶│      spawns      │      loads http://127.0.0.1 │
-│   the .exe installer     │        │                  ▼                             │
+│   the portable zip       │        │                  ▼                             │
 │                          │        │  ┌──────────────────────────────────────────┐  │
 │                          │        │  │ backend/  waitress → Flask               │  │
 │  version.json is ALSO    │        │  │   Jinja UI + JSON API (§5)               │  │
 │  the update manifest ◀───┼────────┼──┤   polled ≤6h for a newer release         │  │
 │  installed copies poll   │        │  └──────────────────────────────────────────┘  │
 └──────────────────────────┘        │                                                │
-                                    │  Data under %LOCALAPPDATA%\UFCPredictor\       │
+                                    │  Data in <app folder>\data\ (portable, §13.1) │
                                     │   SQLite + ChromaDB (seeded on first launch)   │
                                     │                                                │
                                     │  ┌─────────────┐  ┌────────────────────────┐   │
@@ -100,7 +100,7 @@ There is **no IPC bridge**. `preload.js` exposes only `window.ufcPredictor.isDes
 | Desktop app DB | SQLite via SQLAlchemy 2.0 ORM | Zero-config, file-based, fits single-user desktop app; no Alembic — a `schema_version` row plus small hand-written additive upgrades instead |
 | Vector store | ChromaDB `PersistentClient`, bundled default ONNX MiniLM embedding function | Fully local embeddings, no API key or GPU needed; avoids the multi-GB torch/sentence-transformers dependency that default embeddings via `sentence-transformers` would pull in |
 | Secrets (API keys) | `keyring` (Windows Credential Manager backend, explicitly selected) with a Fernet-encrypted-file fallback | OS-native secret storage; explicit backend selection avoids `keyring`'s auto-detection being unreliable once frozen by PyInstaller |
-| Desktop shell | Electron + electron-builder (NSIS) | Gives the local Flask app a real window, Start-menu entry and clean uninstall without rewriting the UI. Kept on a supported Electron major — the version electron-builder pulls in by default carried 17 CVEs, and unlike build tooling the runtime ships to users |
+| Desktop shell | Electron + electron-builder (portable zip) | Gives the local Flask app a real window without rewriting the UI. Ships portable rather than installed so the app and its data live in one user-chosen folder (§13.1). Kept on a supported Electron major — the version electron-builder pulls in by default carried 17 CVEs, and unlike build tooling the runtime ships to users |
 | Backend bundling | PyInstaller, **onedir** mode | Onefile re-extracts 150–300MB to a temp directory on every launch (slow, triggers more antivirus false positives); onedir starts fast, and Electron copies the folder in as `resources/backend` |
 | Marketing site | React + Vite | Componentized landing page, matches prior project scaffolding intent |
 | Scraper | `requests` + `BeautifulSoup4` against `ufc.com`, sitemap-driven discovery | See §2.1 |
@@ -430,8 +430,8 @@ input** — skipping a step ships a mismatched build rather than failing:
 2. **Mandatory pre-bundle step**: run the app once with network access so ChromaDB's default embedding function downloads its ONNX model cache; then include that cache directory in the PyInstaller `datas` so a packaged, possibly-offline install doesn't silently fail to embed on first use.
 3. **Bake the seed database** per §10 (`build_seed_data.py`) so `app/seed_data/` has real content before the next step — PyInstaller's `datas` entry for it must point at an existing directory.
 4. `pyinstaller backend/pyinstaller/app.spec` → `backend/dist/UFCPredictor/` (onedir, contains `UFCPredictor.exe`).
-5. `cd desktop && npm run dist` → copies step 4's folder in as `resources/backend` and emits `desktop/release/UFC Predictor Setup <version>.exe` (NSIS installer, ~180MB).
-6. `python backend/scripts/build_release.py` → copies step 5's installer into `frontend/public/downloads/` and regenerates `version.json` (URL, size, SHA-256) — this is what the landing page's Download button serves.
+5. `cd desktop && npm run dist` → copies step 4's folder in as `resources/backend` and emits `desktop/release/UFC Predictor-<version>-win.zip` (portable, ~230MB; ~630MB extracted).
+6. `python backend/scripts/build_release.py` → copies step 5's zip into `frontend/public/downloads/` and regenerates `version.json` (URL, size, SHA-256) — this is what the landing page's Download button serves.
 
 > **Rebuild step 4 whenever `backend/` changes.** electron-builder copies
 > `backend/dist/UFCPredictor` in verbatim; it cannot tell the Python source
@@ -440,10 +440,31 @@ input** — skipping a step ships a mismatched build rather than failing:
 > instead of the port Electron assigned, and the app died on a health-check
 > timeout while a perfectly healthy server sat on the wrong port.
 
-**Not done yet**: the installer is unsigned, so Windows SmartScreen shows
-"Windows protected your PC" on first run. Code signing needs a purchased
-certificate; the Download page tells users what to expect and publishes the
-SHA-256 so they can verify the file themselves.
+### 13.1 Portable, not installed
+
+The app ships as a zip the user extracts wherever they like — nothing in
+Program Files, nothing in AppData. `desktop/backend.js::resolveDataDir()`
+resolves the data location per launch: an existing `UFC_PREDICTOR_DATA_DIR`
+wins (tests/dev), else `<folder containing the exe>/data` when packaged,
+else `%LOCALAPPDATA%` when that folder isn't writable. Because it is derived
+from `process.execPath` every time and never persisted, moving the folder to
+another drive or a USB stick keeps working. Electron passes the result down
+as an env var, so the Python side stays generic.
+
+The Download page uses `showDirectoryPicker()` where available (Chromium
+only, secure context only) to stream the zip straight into a chosen folder;
+Firefox and Safari fall back to an ordinary download link, and any failure —
+CORS on a cross-origin release asset being the likely one — falls back too.
+
+Electron's single-instance lock is app-wide rather than per-data-directory,
+so two portable copies cannot run simultaneously even though their databases
+are separate.
+
+**Not done yet**: builds are signed with a *self-signed* certificate, which
+only suppresses "Unknown Publisher" on machines that trust it. SmartScreen
+reputation is keyed to a publicly-trusted certificate with download history,
+so public downloads still show "Windows protected your PC". The Download page
+says so and publishes the SHA-256 to verify against.
 
 **Versioning and in-app update checks.** `desktop/package.json`'s `version`
 is the single source of truth — electron-builder stamps the installer from

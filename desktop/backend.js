@@ -33,6 +33,51 @@ function getFreePort() {
 }
 
 /**
+ * Where the app keeps its data (SQLite + ChromaDB), for a portable build.
+ *
+ * The whole point of shipping portable is that the app and its data travel
+ * together: extract the folder anywhere, run it, and everything lives
+ * beside the exe. Delete the folder and nothing is left behind.
+ *
+ * Precedence:
+ *   1. An existing UFC_PREDICTOR_DATA_DIR wins - that's how tests and dev
+ *      runs point somewhere specific, and silently overriding it would make
+ *      those unreproducible.
+ *   2. Packaged: <folder containing the exe>/data
+ *   3. Anything else: null, meaning the backend falls back to %LOCALAPPDATA%.
+ *
+ * Returns null rather than throwing when the location isn't usable. A user
+ * who extracts into Program Files, a read-only share, or a mounted image
+ * should still get a working app in AppData, not a startup failure - the
+ * data is re-seeded from the bundle anyway, so nothing is lost.
+ */
+function resolveDataDir(isPackaged) {
+  const explicit = process.env.UFC_PREDICTOR_DATA_DIR;
+  if (explicit && explicit.trim()) return { dir: explicit, source: "environment" };
+
+  if (!isPackaged) return { dir: null, source: "default (dev run)" };
+
+  // process.execPath is the Electron exe the user launched, so its parent is
+  // the folder they extracted the app into. electron-builder's own portable
+  // target exports PORTABLE_EXECUTABLE_DIR for the same purpose; honour it
+  // first so both packaging styles land in the same place.
+  const appFolder = process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath);
+  const candidate = path.join(appFolder, "data");
+
+  try {
+    fs.mkdirSync(candidate, { recursive: true });
+    // mkdir can succeed on a read-only mount that only fails on write, so
+    // prove writability rather than assuming it.
+    const probe = path.join(candidate, ".write-test");
+    fs.writeFileSync(probe, "");
+    fs.unlinkSync(probe);
+    return { dir: candidate, source: "portable (next to the app)" };
+  } catch (err) {
+    return { dir: null, source: `not writable at ${candidate} (${err.code}) - using AppData` };
+  }
+}
+
+/**
  * Resolves how to launch the backend.
  *
  * Packaged: the PyInstaller build is copied in as an extraResource, so we
@@ -97,7 +142,10 @@ async function startBackend({ isPackaged, resourcesPath, appVersion, onLog = () 
   const port = await getFreePort();
   const { command, args, cwd } = resolveCommand(isPackaged, resourcesPath);
 
+  const { dir: dataDir, source: dataSource } = resolveDataDir(isPackaged);
+
   onLog(`Starting backend: ${command} ${args.join(" ")} (port ${port}, version ${appVersion || "dev"})`);
+  onLog(`Data directory: ${dataDir || "%LOCALAPPDATA%"} [${dataSource}]`);
 
   // --app-version comes from Electron's own package.json, which is what
   // electron-builder stamps the installer with. Passing it down keeps one
@@ -105,9 +153,12 @@ async function startBackend({ isPackaged, resourcesPath, appVersion, onLog = () 
   // the two can't drift and report different numbers to the update check.
   const versionArgs = appVersion ? ["--app-version", appVersion] : [];
 
+  const env = { ...process.env, UFC_PREDICTOR_NO_BROWSER: "1", PYTHONUNBUFFERED: "1" };
+  if (dataDir) env.UFC_PREDICTOR_DATA_DIR = dataDir;
+
   child = spawn(command, [...args, "--port", String(port), "--no-browser", ...versionArgs], {
     cwd,
-    env: { ...process.env, UFC_PREDICTOR_NO_BROWSER: "1", PYTHONUNBUFFERED: "1" },
+    env,
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
   });
@@ -171,4 +222,4 @@ function stopBackend() {
   }, 4000);
 }
 
-module.exports = { startBackend, stopBackend, getFreePort };
+module.exports = { startBackend, stopBackend, getFreePort, resolveDataDir };

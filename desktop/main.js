@@ -19,8 +19,21 @@ let quitting = false;
 /**
  * A second launch would spawn a second backend against the same SQLite
  * database. Focus the existing window instead.
+ *
+ * `boot()` is registered only when the lock is held. Calling app.quit() on
+ * its own is not enough: quit is asynchronous, so an unconditional
+ * whenReady().then(boot) still fires first and spawns a backend process
+ * that the quitting instance then abandons - an orphaned server holding a
+ * port and the database file.
+ *
+ * The lock is app-wide, so this also stops a portable copy running
+ * alongside an installed one. That is stricter than strictly necessary
+ * (two portable folders have separate databases and could safely coexist),
+ * but Electron scopes the lock per application, not per data directory.
  */
-if (!app.requestSingleInstanceLock()) {
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!hasSingleInstanceLock) {
   app.quit();
 } else {
   app.on("second-instance", () => {
@@ -175,7 +188,7 @@ async function boot() {
   }
 }
 
-app.whenReady().then(boot);
+if (hasSingleInstanceLock) app.whenReady().then(boot);
 
 app.on("window-all-closed", () => {
   app.quit();

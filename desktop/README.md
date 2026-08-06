@@ -50,13 +50,97 @@ cd backend
 pyinstaller pyinstaller/app.spec        # -> backend/dist/UFCPredictor
 
 cd ..\desktop
-npm run dist                            # -> desktop/release/*.exe (NSIS installer)
+npm run dist                            # -> desktop/release/*.zip (portable)
 npm run dist:dir                        # unpacked, faster, for testing
 ```
 
-The installer is large (~380MB: Electron runtime + the Python bundle +
-the 28MB seeded fighter database). That is the cost of shipping a Python
-app to machines with no Python.
+The zip is large (~230MB; ~630MB extracted: Electron runtime + the Python
+bundle + the 28MB seeded fighter database). That is the cost of shipping a
+Python app to machines with no Python. Note zip/deflate compresses this
+worse than the NSIS installer's LZMA did - the tradeoff for extracting once
+rather than unpacking to temp on every launch.
+
+## Portable, not installed
+
+The app ships as a **zip the user extracts wherever they like**. There is no
+installer, nothing in Program Files, and nothing in AppData.
+
+```
+C:\wherever\they\extracted\
+├── UFC Predictor.exe      ← run this
+├── resources\             ← app + bundled Python backend
+└── data\                  ← created on first launch
+    ├── chroma_db\             25MB, seeded from the bundle
+    └── ufc_predictor.db       fighters, chats, settings
+```
+
+`backend.js::resolveDataDir()` decides where `data/` goes, in this order:
+
+1. **`UFC_PREDICTOR_DATA_DIR` if already set** — how tests and dev runs point
+   somewhere specific. Overriding it silently would make them unreproducible.
+2. **Packaged: `<folder containing the exe>/data`** — resolved from
+   `process.execPath` at every launch, not stored anywhere, so moving the
+   whole folder to another drive or a USB stick just works.
+3. **Otherwise `%LOCALAPPDATA%`** — the fallback when that folder isn't
+   writable (extracted into Program Files, a read-only share, a mounted
+   image). It degrades rather than failing: the data re-seeds from the
+   bundle, so nothing is lost.
+
+Electron passes the result down as `UFC_PREDICTOR_DATA_DIR`, so the Python
+side stays generic and has no knowledge of Electron's layout.
+
+### Only one copy runs at a time
+
+Electron's single-instance lock is **app-wide**, not per-data-directory, so
+two portable folders can't run side by side even though they have separate
+databases. That's stricter than necessary; scoping it per data directory
+would need a lock file rather than Electron's built-in lock.
+
+## Code signing (self-signed, for testing)
+
+Builds are signed with a locally generated certificate: SHA256 digest,
+SHA256 RFC3161 timestamp from DigiCert.
+
+```powershell
+.\scripts\new-signing-cert.ps1 -Password "<pick one>"   # once per machine
+.\scripts\sign-backend.ps1     -Password "<same>"       # BEFORE npm run dist
+$env:CSC_KEY_PASSWORD = "<same>"
+npm run dist                                            # signs app + installer
+.\scripts\trust-cert.ps1                                # trust it on this machine
+```
+
+`sign-backend.ps1` must run **before** `npm run dist`. electron-builder signs
+the Electron app, the uninstaller and the installer, but only *copies*
+`backend/dist/UFCPredictor/UFCPredictor.exe` in as a resource — signing that
+afterwards leaves the copy inside the installer unsigned.
+
+### What this actually achieves
+
+On machines where you install the `.cer` into Trusted Root, the UAC prompt
+shows **the publisher name instead of "Unknown Publisher"**, and
+`signtool verify /pa` passes.
+
+**It does not clear SmartScreen for the public.** SmartScreen reputation is
+keyed to a publicly-trusted certificate that has accumulated download
+history; a self-signed cert has neither, and no amount of local trust changes
+what Microsoft's reputation service thinks. Anyone downloading the installer
+from the internet still gets "Windows protected your PC". Only a purchased
+certificate — ideally EV, which starts with reputation — removes that, which
+is why §14 of the spec still lists signing as an open item.
+
+### Handle the .pfx like a password
+
+`desktop/certs/` is gitignored. The `.pfx` holds the private key: anyone with
+it can sign anything as this publisher, and on a machine that trusts the root
+that software runs without a warning. Never commit it, and only install the
+root cert on machines you control (`trust-cert.ps1 -Remove` undoes it).
+
+### Signing changes the file, so re-publish after signing
+
+Signing rewrites the binary, so its SHA-256 and size change. If a release is
+already published, upload the signed installer to replace the asset and then
+re-run `build_release.py` — otherwise the checksum on the Download page
+describes a file nobody has.
 
 ## Versioning and updates
 

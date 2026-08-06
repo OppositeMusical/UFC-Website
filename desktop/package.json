@@ -1,6 +1,6 @@
 {
   "name": "ufc-predictor-desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Electron shell for the UFC Predictor local Flask app",
   "main": "main.js",
@@ -37,19 +37,19 @@
     "win": {
       "target": [
         {
-          "target": "nsis",
+          "target": "zip",
           "arch": [
             "x64"
           ]
         }
-      ]
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "UFC Predictor"
+      ],
+      "signtoolOptions": {
+        "certificateFile": "certs/code-signing.pfx",
+        "signingHashAlgorithms": [
+          "sha256"
+        ],
+        "rfc3161TimeStampServer": "http://timestamp.digicert.com"
+      }
     }
   }
 }

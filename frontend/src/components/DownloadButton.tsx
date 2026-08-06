@@ -55,9 +55,80 @@ async function assetExists(url: string): Promise<boolean> {
   }
 }
 
+/**
+ * showDirectoryPicker() is Chromium-only (Chrome/Edge) and needs a secure
+ * context. Firefox and Safari get an ordinary download link instead - the
+ * end result is the same file, they just pick the destination through the
+ * browser's own save dialog.
+ */
+function supportsFolderPicker(): boolean {
+  return typeof window !== "undefined" && "showDirectoryPicker" in window && window.isSecureContext;
+}
+
+type Transfer =
+  | { state: "idle" }
+  | { state: "saving"; percent: number }
+  | { state: "done"; folder: string }
+  | { state: "error"; message: string };
+
 export default function DownloadButton() {
   const [info, setInfo] = useState<VersionInfo | null>(null);
   const [status, setStatus] = useState<Status>("loading");
+  const [transfer, setTransfer] = useState<Transfer>({ state: "idle" });
+
+  async function handlePickFolder() {
+    if (!info) return;
+
+    let dir: FileSystemDirectoryHandle;
+    try {
+      dir = await (window as unknown as {
+        showDirectoryPicker: (o?: { mode?: string }) => Promise<FileSystemDirectoryHandle>;
+      }).showDirectoryPicker({ mode: "readwrite" });
+    } catch {
+      // AbortError when the user cancels the picker - not a failure worth
+      // reporting, just return to idle.
+      setTransfer({ state: "idle" });
+      return;
+    }
+
+    setTransfer({ state: "saving", percent: 0 });
+
+    try {
+      const response = await fetch(info.downloadUrl);
+      if (!response.ok || !response.body) throw new Error(`Download failed (${response.status})`);
+
+      const fileName = info.fileName || "UFC-Predictor-portable.zip";
+      const handle = await dir.getFileHandle(fileName, { create: true });
+      const writable = await handle.createWritable();
+
+      // Streamed chunk by chunk rather than response.blob(): this archive is
+      // ~230MB and buffering it in memory before writing risks an OOM on a
+      // modest machine, and gives no progress feedback on a slow connection.
+      const total = Number(response.headers.get("content-length")) || info.sizeBytes || 0;
+      const reader = response.body.getReader();
+      let received = 0;
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await writable.write(value);
+        received += value.byteLength;
+        if (total) setTransfer({ state: "saving", percent: Math.min(99, Math.round((received / total) * 100)) });
+      }
+      await writable.close();
+
+      setTransfer({ state: "done", folder: dir.name });
+    } catch (err) {
+      // Most likely cause is CORS: release assets are served from another
+      // origin, and a cross-origin fetch without permissive headers cannot
+      // be streamed. The plain <a download> fallback is unaffected because
+      // the browser, not JS, performs that request.
+      setTransfer({
+        state: "error",
+        message: `Could not save to that folder (${err instanceof Error ? err.message : "unknown error"}).`,
+      });
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -124,14 +195,59 @@ export default function DownloadButton() {
 
   return (
     <div className="download-cta">
-      <a className="btn btn--primary btn--download" href={info.downloadUrl} download>
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M12 3v12" />
-          <path d="M7 12l5 5 5-5" />
-          <path d="M4 21h16" />
-        </svg>
-        {info.kind === "installer" ? "Download Installer" : "Download for Windows"}
-      </a>
+      {supportsFolderPicker() ? (
+        <button
+          type="button"
+          className="btn btn--primary btn--download"
+          onClick={handlePickFolder}
+          disabled={transfer.state === "saving"}
+        >
+          {transfer.state === "saving" ? (
+            <>
+              <span className="btn__spinner" aria-hidden="true" />
+              Saving… {transfer.percent}%
+            </>
+          ) : (
+            <>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              </svg>
+              Choose Folder &amp; Download
+            </>
+          )}
+        </button>
+      ) : (
+        <a className="btn btn--primary btn--download" href={info.downloadUrl} download>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 3v12" />
+            <path d="M7 12l5 5 5-5" />
+            <path d="M4 21h16" />
+          </svg>
+          Download for Windows
+        </a>
+      )}
+
+      {transfer.state === "saving" && (
+        <div className="transfer-bar" role="progressbar" aria-valuenow={transfer.percent} aria-valuemin={0} aria-valuemax={100}>
+          <span className="transfer-bar__fill" style={{ width: `${transfer.percent}%` }} />
+        </div>
+      )}
+      {transfer.state === "done" && (
+        <p className="transfer-note transfer-note--ok">
+          Saved to <strong>{transfer.folder}</strong>. Extract the zip there, then run{" "}
+          <code>UFC Predictor.exe</code> — it creates its <code>data</code> folder alongside itself.
+        </p>
+      )}
+      {transfer.state === "error" && (
+        <p className="transfer-note transfer-note--err">
+          {transfer.message}{" "}
+          <a href={info.downloadUrl} download>
+            Download normally instead
+          </a>
+          .
+        </p>
+      )}
+
       <p className="download-card__version">
         Version {info.version}
         {size ? ` · ${size}` : ""} · Windows 10/11 (64-bit)

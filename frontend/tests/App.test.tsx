@@ -23,11 +23,11 @@ function mockVersionJson(body: unknown, ok = true, assetOk = true) {
 beforeEach(() => {
   mockVersionJson({
     version: "0.1.0",
-    downloadUrl: "/downloads/UFC-Predictor-Setup-0.1.0.exe",
-    fileName: "UFC-Predictor-Setup-0.1.0.exe",
-    kind: "installer",
-    sizeBytes: 186904009,
-    sha256: "b6a08e69d90c9cd519e1fb90777b181a23296c6b93bceaa7d80d37e2e46d96cf",
+    downloadUrl: "/downloads/UFC-Predictor-0.1.0-portable-win64.zip",
+    fileName: "UFC-Predictor-0.1.0-portable-win64.zip",
+    kind: "portable",
+    sizeBytes: 243864618,
+    sha256: "01ef96c645ec4155342da68721fd5019ab1a29112ea12ac7df2a080f34672598",
     releasedAt: "2026-08-04",
     releaseNotes: ["Runs as a real desktop app", "Kalshi market questions"],
   });
@@ -61,7 +61,7 @@ describe("App", () => {
         <App />
       </MemoryRouter>
     );
-    expect(await screen.findByRole("link", { name: /Download Installer/i })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /Download for Windows/i })).toBeInTheDocument();
     expect(screen.getByText(/informational and entertainment purposes only/i)).toBeInTheDocument();
   });
 });
@@ -105,23 +105,23 @@ describe("scroll reveal", () => {
 });
 
 describe("DownloadButton", () => {
-  it("links to the Electron installer and shows version, size and checksum", async () => {
+  it("links to the portable zip and shows version, size and checksum", async () => {
     render(
       <MemoryRouter initialEntries={["/download"]}>
         <App />
       </MemoryRouter>
     );
 
-    // "installer" kind changes the label - a .exe installer and a raw zip
-    // are not the same promise to the user.
-    const link = await screen.findByRole("link", { name: /Download Installer/i });
-    expect(link).toHaveAttribute("href", "/downloads/UFC-Predictor-Setup-0.1.0.exe");
+    // jsdom has no showDirectoryPicker, so this exercises the fallback that
+    // Firefox and Safari users get: a plain download link.
+    const link = await screen.findByRole("link", { name: /Download for Windows/i });
+    expect(link).toHaveAttribute("href", "/downloads/UFC-Predictor-0.1.0-portable-win64.zip");
     expect(link).toHaveAttribute("download");
     expect(screen.getByText(/Version 0\.1\.0/)).toBeInTheDocument();
-    expect(screen.getByText(/178 MB/)).toBeInTheDocument();
+    expect(screen.getByText(/233 MB/)).toBeInTheDocument();
     // Full hash, not truncated - a partial checksum can't be verified.
     expect(
-      screen.getByText("b6a08e69d90c9cd519e1fb90777b181a23296c6b93bceaa7d80d37e2e46d96cf")
+      screen.getByText("01ef96c645ec4155342da68721fd5019ab1a29112ea12ac7df2a080f34672598")
     ).toBeInTheDocument();
   });
 
@@ -140,7 +140,7 @@ describe("DownloadButton", () => {
     );
 
     expect(await screen.findByText(/Build not available yet/i)).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /Download Installer/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Download for Windows/i })).not.toBeInTheDocument();
   });
 
   it("degrades gracefully when version.json is missing", async () => {
@@ -171,8 +171,8 @@ describe("release notes", () => {
   it("omits the section entirely when a release has no notes", async () => {
     mockVersionJson({
       version: "0.1.0",
-      downloadUrl: "/downloads/UFC-Predictor-Setup-0.1.0.exe",
-      kind: "installer",
+      downloadUrl: "/downloads/UFC-Predictor-0.1.0-portable-win64.zip",
+      kind: "portable",
       sizeBytes: 186904009,
     });
 
@@ -181,7 +181,7 @@ describe("release notes", () => {
         <App />
       </MemoryRouter>
     );
-    await screen.findByRole("link", { name: /Download Installer/i });
+    await screen.findByRole("link", { name: /Download for Windows/i });
     expect(screen.queryByText(/What's new/i)).not.toBeInTheDocument();
   });
 });
@@ -225,8 +225,8 @@ describe("artifact availability", () => {
     mockVersionJson(
       {
         version: "0.1.0",
-        downloadUrl: "/downloads/UFC-Predictor-Setup-0.1.0.exe",
-        kind: "installer",
+        downloadUrl: "/downloads/UFC-Predictor-0.1.0-portable-win64.zip",
+        kind: "portable",
       },
       true,
       false
@@ -239,7 +239,7 @@ describe("artifact availability", () => {
     );
 
     expect(await screen.findByText(/Build not available yet/i)).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /Download Installer/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Download for Windows/i })).not.toBeInTheDocument();
   });
 
   it("trusts absolute URLs without probing them", async () => {
@@ -249,7 +249,7 @@ describe("artifact availability", () => {
       {
         version: "0.1.0",
         downloadUrl: "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/x.exe",
-        kind: "installer",
+        kind: "portable",
       },
       true,
       false
@@ -261,7 +261,7 @@ describe("artifact availability", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByRole("link", { name: /Download Installer/i })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /Download for Windows/i })).toBeInTheDocument();
   });
 });
 
@@ -277,7 +277,7 @@ describe("unavailable-build messaging", () => {
     });
 
     mockVersionJson(
-      { version: "0.1.0", downloadUrl: "/downloads/UFC-Predictor-Setup-0.1.0.exe", kind: "installer" },
+      { version: "0.1.0", downloadUrl: "/downloads/UFC-Predictor-0.1.0-portable-win64.zip", kind: "portable" },
       true,
       false
     );
@@ -297,7 +297,7 @@ describe("unavailable-build messaging", () => {
 
   it("keeps the build hint when running locally", async () => {
     mockVersionJson(
-      { version: "0.1.0", downloadUrl: "/downloads/UFC-Predictor-Setup-0.1.0.exe", kind: "installer" },
+      { version: "0.1.0", downloadUrl: "/downloads/UFC-Predictor-0.1.0-portable-win64.zip", kind: "portable" },
       true,
       false
     );
@@ -309,5 +309,44 @@ describe("unavailable-build messaging", () => {
     );
 
     expect(await screen.findByText(/build_release\.py/)).toBeInTheDocument();
+  });
+});
+
+describe("folder picker", () => {
+  it("offers a folder chooser when the browser supports it", async () => {
+    // Chromium exposes showDirectoryPicker; jsdom does not, so stub it to
+    // exercise the path Chrome/Edge users actually get.
+    const picker = vi.fn(() => Promise.resolve({ name: "MyApps" }));
+    Object.defineProperty(window, "showDirectoryPicker", { configurable: true, writable: true, value: picker });
+    Object.defineProperty(window, "isSecureContext", { configurable: true, writable: true, value: true });
+
+    render(
+      <MemoryRouter initialEntries={["/download"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    // A <button>, not an <a>: the file is written by JS into the chosen
+    // directory rather than handed to the browser's download manager.
+    const btn = await screen.findByRole("button", { name: /Choose Folder & Download/i });
+    expect(btn).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Download for Windows/i })).not.toBeInTheDocument();
+
+    delete (window as unknown as Record<string, unknown>).showDirectoryPicker;
+  });
+
+  it("falls back to a plain download link without picker support", async () => {
+    // Firefox and Safari. The end result is the same file; the browser's
+    // own save dialog picks the destination.
+    expect("showDirectoryPicker" in window).toBe(false);
+
+    render(
+      <MemoryRouter initialEntries={["/download"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    const link = await screen.findByRole("link", { name: /Download for Windows/i });
+    expect(link).toHaveAttribute("download");
   });
 });

@@ -610,6 +610,47 @@ a {
   font-size: 0.82em;
 }
 
+/* ---------- Folder-picker transfer ---------- */
+.transfer-bar {
+  width: 100%;
+  max-width: 22rem;
+  height: 6px;
+  margin-top: 0.9rem;
+  border-radius: 999px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+.transfer-bar__fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-crimson), var(--accent-crimson-bright));
+  transition: width 0.2s var(--ease-out);
+}
+
+.transfer-note {
+  max-width: 32rem;
+  margin: 0.9rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+.transfer-note--ok {
+  color: var(--text-muted);
+}
+.transfer-note--ok strong {
+  color: var(--text-primary);
+}
+.transfer-note--err {
+  color: var(--amber);
+}
+.transfer-note code {
+  background: var(--bg-panel-raised);
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+  color: var(--text-primary);
+}
+
 .download-card__meta {
   margin: 0.3rem 0 0;
   font-size: 0.78rem;

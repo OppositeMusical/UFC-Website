@@ -41,35 +41,39 @@ PUBLIC_DIR = REPO_ROOT / "frontend" / "public"
 DOWNLOADS_DIR = PUBLIC_DIR / "downloads"
 
 
-def find_installer(version: str | None) -> tuple[Path, str]:
-    """Locates the electron-builder NSIS output and the version it encodes.
+def find_artifact(version: str | None) -> tuple[Path, str]:
+    """Locates the electron-builder portable zip and the version it encodes.
 
-    electron-builder names it "UFC Predictor Setup 1.2.3.exe" - spaces and
-    all - which is awkward in a URL, so the published copy gets renamed.
+    The app ships portable: a zip the user extracts wherever they like, with
+    the app writing its data into a `data/` folder beside the exe. There is
+    no installer, so nothing lands in Program Files or AppData.
+
+    electron-builder names it "UFC Predictor-1.2.3-win.zip" - spaces and all
+    - which is awkward in a URL, so the published copy gets renamed.
     """
     if not RELEASE_DIR.exists():
         sys.exit(
             f"No Electron build found at {RELEASE_DIR}.\n"
             "Run `npm run dist` in desktop/ first (and `pyinstaller pyinstaller/app.spec` "
-            "in backend/ before that, so the installer wraps a current backend)."
+            "in backend/ before that, so the package wraps a current backend)."
         )
 
     candidates = sorted(
-        (p for p in RELEASE_DIR.glob("*Setup*.exe") if not p.name.endswith(".__uninstaller.exe")),
+        RELEASE_DIR.glob("*.zip"),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
     if not candidates:
-        sys.exit(f"No installer (*Setup*.exe) in {RELEASE_DIR}. Did `npm run dist` finish?")
+        sys.exit(f"No portable zip in {RELEASE_DIR}. Did `npm run dist` finish?")
 
-    installer = candidates[0]
+    artifact = candidates[0]
     if version:
-        return installer, version
+        return artifact, version
 
-    match = re.search(r"(\d+\.\d+\.\d+)", installer.stem)
+    match = re.search(r"(\d+\.\d+\.\d+)", artifact.stem)
     if not match:
-        sys.exit(f"Could not read a version out of {installer.name} - pass --version explicitly.")
-    return installer, match.group(1)
+        sys.exit(f"Could not read a version out of {artifact.name} - pass --version explicitly.")
+    return artifact, match.group(1)
 
 
 def sha256_of(path: Path) -> str:
@@ -115,7 +119,7 @@ def main() -> None:
     if args.download_url and args.github_release:
         sys.exit("Use either --download-url or --github-release, not both.")
 
-    installer, version = find_installer(args.version)
+    artifact, version = find_artifact(args.version)
 
     DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
     if not args.keep_old:
@@ -125,10 +129,10 @@ def main() -> None:
             print(f"Removing old {stale.name}")
             stale.unlink()
 
-    asset_name = f"UFC-Predictor-Setup-{version}.exe"
+    asset_name = f"UFC-Predictor-{version}-portable-win64.zip"
     dest = DOWNLOADS_DIR / asset_name
-    print(f"Copying {installer.name} -> {dest.relative_to(REPO_ROOT)}")
-    shutil.copyfile(installer, dest)
+    print(f"Copying {artifact.name} -> {dest.relative_to(REPO_ROOT)}")
+    shutil.copyfile(artifact, dest)
 
     size_bytes = dest.stat().st_size
     print(f"Hashing {size_bytes / (1024 * 1024):.1f} MB...")
@@ -158,7 +162,7 @@ def main() -> None:
         "version": version,
         "downloadUrl": download_url,
         "fileName": asset_name,
-        "kind": "installer",
+        "kind": "portable",
         "sizeBytes": size_bytes,
         "sha256": checksum,
         "releasedAt": dt.date.today().isoformat(),

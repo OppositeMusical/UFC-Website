@@ -81,11 +81,11 @@ skipping one ships a mismatched build rather than failing loudly.
 ```powershell
 python backend\scripts\set_version.py 0.2.0        # 1. bump desktop/package.json
 cd backend    ; pyinstaller pyinstaller/app.spec   # 2. Python bundle
-cd ..\desktop ; npm run dist                       # 3. wrap (2) -> NSIS installer
+cd ..\desktop ; npm run dist                       # 3. wrap (2) -> portable zip
 cd ..\backend ; python scripts\build_release.py --notes "What changed"   # 4. publish (3)
 ```
 
-Step 4 copies the installer into `frontend/public/downloads/` and regenerates
+Step 4 copies the portable zip into `frontend/public/downloads/` and regenerates
 `version.json` (URL, size, SHA-256, release notes). That manifest is what the
 Download page serves **and** what installed copies poll for updates — publishing
 it is the only step that announces a release.
@@ -155,8 +155,10 @@ and deliberately ruled out; see §2.1 of the spec for why.
 
 ## Known gaps
 
-- The installer is **unsigned**, so Windows SmartScreen warns on first run. The
-  Download page explains this and publishes a SHA-256 to verify against.
+- The build is signed with a **self-signed** certificate, which suppresses the
+  "Unknown Publisher" prompt only on machines that trust it. Public downloads
+  still trip SmartScreen; the Download page explains this and publishes a
+  SHA-256 to verify against.
 - **Windows only.** The Download page lists macOS as coming soon.
 - The app uses Electron's default icon.
 - Update checks resolve against `raw.githubusercontent.com/OppositeMusical/UFC-Website`,

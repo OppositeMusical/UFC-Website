@@ -7,7 +7,10 @@ export default function Download() {
       <div className="container">
         <Reveal className="section__heading">
           <h2>Download UFC Predictor</h2>
-          <p>A standard Windows installer. Runs as a real desktop app - no browser tab, no terminal.</p>
+          <p>
+            Portable - nothing is installed. Pick a folder, and the app and its fighter database live there
+            together. Delete the folder and it's gone, with nothing left behind.
+          </p>
         </Reveal>
 
         <Reveal delay={90} from="scale">
@@ -38,16 +41,21 @@ export default function Download() {
         </Reveal>
         <ol className="steps">
           <Reveal as="li" from="left">
-            <strong>Run the installer.</strong>
-            It adds UFC Predictor to your Start menu and desktop. Everything it needs is bundled -
-            no Python, no separate downloads, and the fighter database ships pre-loaded so there's
-            nothing to sync before your first prediction.
+            <strong>Extract the zip into the folder you chose.</strong>
+            Everything is bundled - no Python, no separate downloads - and the fighter database ships
+            pre-loaded, so there's nothing to sync before your first prediction.
           </Reveal>
           <Reveal as="li" from="left" delay={90}>
+            <strong>Run <code>UFC Predictor.exe</code>.</strong>
+            On first launch it creates a <code>data</code> folder next to itself holding the fighter
+            database and your chat history. Move the whole folder anywhere - another drive, a USB
+            stick - and it keeps working, because the app finds its data by looking beside itself.
+          </Reveal>
+          <Reveal as="li" from="left" delay={135}>
             <strong>Windows may warn you first.</strong>
-            The installer isn't code-signed yet, so SmartScreen shows "Windows protected your PC".
-            Choose <em>More info</em> then <em>Run anyway</em>. You can verify the download against
-            the SHA-256 above if you'd rather check it yourself.
+            The build isn't signed by a certificate authority Windows recognises, so SmartScreen shows
+            "Windows protected your PC". Choose <em>More info</em> then <em>Run anyway</em>. You can
+            check the download against the SHA-256 above if you'd rather verify it yourself.
           </Reveal>
           <Reveal as="li" from="left" delay={180}>
             <strong>Pick your AI in Settings.</strong>

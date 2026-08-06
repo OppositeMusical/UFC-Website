@@ -1,14 +1,14 @@
 {
-  "version": "0.3.1",
-  "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/MMA-Assist-0.3.1-portable-win64.zip",
-  "fileName": "MMA-Assist-0.3.1-portable-win64.zip",
+  "version": "0.3.2",
+  "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/MMA-Assist-0.3.2-portable-win64.zip",
+  "fileName": "MMA-Assist-0.3.2-portable-win64.zip",
   "kind": "portable",
-  "sizeBytes": 243867792,
-  "sha256": "0c4fed4fec91efe7400e88522a30b70a078b580ac4ca23d712debcfd0df438f7",
+  "sizeBytes": 243867732,
+  "sha256": "be52f404a8afba756f9aaf1c1fe87b12341e3e5612c3877464fed2fd6d18332f",
   "releasedAt": "2026-08-06",
   "releaseNotes": [
-    "Signing certificate reissued as MMA Assist for consistency with the rename",
-    "No functional changes from 0.3.0"
+    "Fix: picking a fighter from the dropdown no longer clears its own selection - predictions were failing with 'Pick both fighters from the autocomplete dropdown'",
+    "Fix: the dropdown no longer reopens right after you choose"
   ],
-  "notes": "Points at the latest GitHub release of OppositeMusical/UFC-Website. Create that release and upload MMA-Assist-0.3.1-portable-win64.zip as an asset, or the link 404s."
+  "notes": "Points at the latest GitHub release of OppositeMusical/UFC-Website. Create that release and upload MMA-Assist-0.3.2-portable-win64.zip as an asset, or the link 404s."
 }

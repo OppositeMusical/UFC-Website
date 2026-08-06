@@ -35,7 +35,7 @@ export default function Navbar() {
       <div className="navbar__inner">
         <Link to="/" className="navbar__brand">
           <span className="navbar__brand-mark">🥊</span>
-          UFC <span>Predictor</span>
+          MMA <span>Assist</span>
         </Link>
 
         <button

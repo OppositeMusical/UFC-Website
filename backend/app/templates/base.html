@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{% block title %}UFC Predictor{% endblock %}</title>
+  <title>{% block title %}MMA Assist{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}" />
   {% block extra_css %}{% endblock %}
   <script>
@@ -21,7 +21,7 @@
       <div class="sidebar__head">
         <a class="sidebar__brand" href="{{ url_for('main.dashboard') }}">
           <span class="sidebar__brand-mark">🥊</span>
-          <span class="sidebar__brand-text">UFC <span>Predictor</span></span>
+          <span class="sidebar__brand-text">MMA <span>Assist</span></span>
         </a>
         <button class="sidebar__toggle" id="sidebar-toggle" title="Collapse sidebar" aria-label="Collapse sidebar" aria-expanded="true">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

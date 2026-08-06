@@ -97,7 +97,7 @@ export default function DownloadButton() {
       const response = await fetch(info.downloadUrl);
       if (!response.ok || !response.body) throw new Error(`Download failed (${response.status})`);
 
-      const fileName = info.fileName || "UFC-Predictor-portable.zip";
+      const fileName = info.fileName || "MMA-Assist-portable.zip";
       const handle = await dir.getFileHandle(fileName, { create: true });
       const writable = await handle.createWritable();
 
@@ -235,7 +235,7 @@ export default function DownloadButton() {
       {transfer.state === "done" && (
         <p className="transfer-note transfer-note--ok">
           Saved to <strong>{transfer.folder}</strong>. Extract the zip there, then run{" "}
-          <code>UFC Predictor.exe</code> — it creates its <code>data</code> folder alongside itself.
+          <code>MMA Assist.exe</code> — it creates its <code>data</code> folder alongside itself.
         </p>
       )}
       {transfer.state === "error" && (

@@ -23,8 +23,8 @@ function mockVersionJson(body: unknown, ok = true, assetOk = true) {
 beforeEach(() => {
   mockVersionJson({
     version: "0.1.0",
-    downloadUrl: "/downloads/UFC-Predictor-0.1.0-portable-win64.zip",
-    fileName: "UFC-Predictor-0.1.0-portable-win64.zip",
+    downloadUrl: "/downloads/MMA-Assist-0.2.0-portable-win64.zip",
+    fileName: "MMA-Assist-0.2.0-portable-win64.zip",
     kind: "portable",
     sizeBytes: 243864618,
     sha256: "01ef96c645ec4155342da68721fd5019ab1a29112ea12ac7df2a080f34672598",
@@ -40,7 +40,7 @@ describe("App", () => {
         <App />
       </MemoryRouter>
     );
-    expect(screen.getByText("Predictor")).toBeInTheDocument();
+    expect(screen.getByText("Assist")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Features" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "How It Works" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Download" })).toBeInTheDocument();
@@ -115,7 +115,7 @@ describe("DownloadButton", () => {
     // jsdom has no showDirectoryPicker, so this exercises the fallback that
     // Firefox and Safari users get: a plain download link.
     const link = await screen.findByRole("link", { name: /Download for Windows/i });
-    expect(link).toHaveAttribute("href", "/downloads/UFC-Predictor-0.1.0-portable-win64.zip");
+    expect(link).toHaveAttribute("href", "/downloads/MMA-Assist-0.2.0-portable-win64.zip");
     expect(link).toHaveAttribute("download");
     expect(screen.getByText(/Version 0\.1\.0/)).toBeInTheDocument();
     expect(screen.getByText(/233 MB/)).toBeInTheDocument();
@@ -171,7 +171,7 @@ describe("release notes", () => {
   it("omits the section entirely when a release has no notes", async () => {
     mockVersionJson({
       version: "0.1.0",
-      downloadUrl: "/downloads/UFC-Predictor-0.1.0-portable-win64.zip",
+      downloadUrl: "/downloads/MMA-Assist-0.2.0-portable-win64.zip",
       kind: "portable",
       sizeBytes: 186904009,
     });
@@ -225,7 +225,7 @@ describe("artifact availability", () => {
     mockVersionJson(
       {
         version: "0.1.0",
-        downloadUrl: "/downloads/UFC-Predictor-0.1.0-portable-win64.zip",
+        downloadUrl: "/downloads/MMA-Assist-0.2.0-portable-win64.zip",
         kind: "portable",
       },
       true,
@@ -277,7 +277,7 @@ describe("unavailable-build messaging", () => {
     });
 
     mockVersionJson(
-      { version: "0.1.0", downloadUrl: "/downloads/UFC-Predictor-0.1.0-portable-win64.zip", kind: "portable" },
+      { version: "0.1.0", downloadUrl: "/downloads/MMA-Assist-0.2.0-portable-win64.zip", kind: "portable" },
       true,
       false
     );
@@ -297,7 +297,7 @@ describe("unavailable-build messaging", () => {
 
   it("keeps the build hint when running locally", async () => {
     mockVersionJson(
-      { version: "0.1.0", downloadUrl: "/downloads/UFC-Predictor-0.1.0-portable-win64.zip", kind: "portable" },
+      { version: "0.1.0", downloadUrl: "/downloads/MMA-Assist-0.2.0-portable-win64.zip", kind: "portable" },
       true,
       false
     );

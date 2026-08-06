@@ -6,7 +6,7 @@ export default function Download() {
     <section className="section section--first">
       <div className="container">
         <Reveal className="section__heading">
-          <h2>Download UFC Predictor</h2>
+          <h2>Download MMA Assist</h2>
           <p>
             Portable - nothing is installed. Pick a folder, and the app and its fighter database live there
             together. Delete the folder and it's gone, with nothing left behind.
@@ -46,7 +46,7 @@ export default function Download() {
             pre-loaded, so there's nothing to sync before your first prediction.
           </Reveal>
           <Reveal as="li" from="left" delay={90}>
-            <strong>Run <code>UFC Predictor.exe</code>.</strong>
+            <strong>Run <code>MMA Assist.exe</code>.</strong>
             On first launch it creates a <code>data</code> folder next to itself holding the fighter
             database and your chat history. Move the whole folder anywhere - another drive, a USB
             stick - and it keeps working, because the app finds its data by looking beside itself.
@@ -72,9 +72,9 @@ export default function Download() {
         </ol>
 
         <div className="disclaimer-box">
-          UFC Predictor is for informational and entertainment purposes only. It is not financial or gambling
+          MMA Assist is for informational and entertainment purposes only. It is not financial or gambling
           advice, and it does not place bets or wagers on your behalf. You are responsible for complying with the
-          laws and platform terms that apply to you. UFC Predictor is not affiliated with the UFC, PrizePicks,
+          laws and platform terms that apply to you. MMA Assist is not affiliated with the UFC, PrizePicks,
           DraftKings, or Kalshi.
         </div>
       </div>

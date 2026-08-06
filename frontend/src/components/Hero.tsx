@@ -16,7 +16,7 @@ export default function Hero() {
           Fighter stats, not <span className="hero__accent">vibes</span>.
         </h1>
         <p className="lede hero-in" style={{ animationDelay: "220ms" }}>
-          UFC Predictor is a downloadable desktop app that runs your choice of AI - fully offline with Ollama,
+          MMA Assist is a downloadable desktop app that runs your choice of AI - fully offline with Ollama,
           or your own OpenAI, Gemini, Deepseek, or Claude key - grounded in real, scraped UFC career stats for
           every prop you check.
         </p>

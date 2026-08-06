@@ -181,7 +181,7 @@ async function boot() {
     // always the actual answer, and it is otherwise invisible in a
     // packaged app with no console.
     dialog.showErrorBox(
-      "UFC Predictor could not start",
+      "MMA Assist could not start",
       `${err.message}\n\n--- Backend output ---\n${startupLog.slice(-25).join("\n")}`
     );
     app.quit();

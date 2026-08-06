@@ -1,27 +1,26 @@
 #!/usr/bin/env python
-"""Publishes the Electron desktop installer to the marketing site.
+"""Publishes the portable MMA Assist build to the marketing site.
 
-The site hands users the Electron build - a normal Windows installer that
-puts "UFC Predictor" in the Start menu and opens in its own window. The raw
-PyInstaller folder is an implementation detail bundled inside it, not
-something a user should be downloading and unzipping.
+The app ships portable: a zip the user extracts wherever they like, with the
+app writing its data into a `data/` folder beside the exe. Nothing is
+installed. The raw PyInstaller folder inside is an implementation detail.
 
 Full release sequence (order matters - see desktop/README.md):
 
     cd backend
     pyinstaller pyinstaller/app.spec        # 1. Python bundle
-    cd ../desktop && npm run dist           # 2. wraps (1) into the installer
+    cd ../desktop && npm run dist           # 2. wraps (1) into the zip
     cd ../backend
     python scripts/build_release.py         # 3. publishes (2) to the site
 
 Writes:
-    frontend/public/downloads/UFC-Predictor-Setup-<version>.exe
+    frontend/public/downloads/MMA-Assist-<version>-portable-win64.zip
     frontend/public/version.json
 
-The installer lands in the site's `public/` directory so `npm run dev` and
+The zip lands in the site's `public/` directory so `npm run dev` and
 `npm run build` both serve it with no extra hosting. It is gitignored: a
-~190MB build artifact, not source. For a public release, upload the same
-file somewhere and re-run with --github-release OWNER/REPO.
+~230MB build artifact, not source. For a public release, upload the same
+file to a release host and re-run with --github-release OWNER/REPO.
 """
 from __future__ import annotations
 
@@ -129,7 +128,7 @@ def main() -> None:
             print(f"Removing old {stale.name}")
             stale.unlink()
 
-    asset_name = f"UFC-Predictor-{version}-portable-win64.zip"
+    asset_name = f"MMA-Assist-{version}-portable-win64.zip"
     dest = DOWNLOADS_DIR / asset_name
     print(f"Copying {artifact.name} -> {dest.relative_to(REPO_ROOT)}")
     shutil.copyfile(artifact, dest)

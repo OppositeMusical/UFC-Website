@@ -1,4 +1,4 @@
-"""Entry point for the UFC Predictor backend.
+"""Entry point for the MMA Assist backend.
 
 Starts a waitress WSGI server (not Flask's dev server - see docs/SPEC.md
 section 3). Runs in two modes:
@@ -39,7 +39,7 @@ def _port_in_use(host: str, port: int) -> bool:
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the UFC Predictor backend server")
+    parser = argparse.ArgumentParser(description="Run the MMA Assist backend server")
     parser.add_argument(
         "--port",
         type=int,
@@ -95,7 +95,7 @@ def main(argv: list[str] | None = None) -> None:
 
     # Printed before serve() blocks. Electron reads this to learn the URL.
     print(f"{READY_PREFIX} {url}", flush=True)
-    print(f"UFC Predictor running at {url}  (Ctrl+C to stop)", flush=True)
+    print(f"MMA Assist running at {url}  (Ctrl+C to stop)", flush=True)
     serve(app, host=host, port=port)
 
 

@@ -10,6 +10,7 @@ An MMA-themed product in three parts:
 
 **Full technical spec** — architecture, data models, API contracts, scraper ethics, packaging, versioning: [`docs/SPEC.md`](docs/SPEC.md).
 **Electron shell design notes**: [`desktop/README.md`](desktop/README.md).
+**Accounts & payments design** (proposed, not built): [`docs/ACCOUNTS_AND_PAYMENTS_SPEC.md`](docs/ACCOUNTS_AND_PAYMENTS_SPEC.md) — a Java/Spring Boot service for Stripe payments, OAuth accounts, and desktop licence tokens.
 
 ## Quick start
 

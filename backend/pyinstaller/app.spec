@@ -17,7 +17,7 @@ RAG silently has nothing to embed against on an offline install.
 import os
 import sys
 
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 BACKEND_DIR = os.path.join(SPECPATH, "..")  # noqa: F821 - SPECPATH is injected by PyInstaller
 
@@ -45,6 +45,15 @@ if sys.platform == "darwin":
     hiddenimports = ["keyring.backends.macOS"]
 elif sys.platform == "win32":
     hiddenimports = ["keyring.backends.Windows"]
+    # WinVaultKeyring reaches the Credential Manager through win32ctypes,
+    # which is a runtime-only dependency PyInstaller's static analysis does
+    # not follow. Without it the backend import raises inside frozen builds,
+    # keyring_store swallows the error by design, and every API key silently
+    # lands in the encrypted-file fallback instead - contradicting the
+    # "OS-native secret storage" the app claims. Shipped that way until
+    # v0.4.0; found by probing the frozen exe rather than the venv, because
+    # the venv has win32ctypes and looks fine.
+    hiddenimports += collect_submodules("win32ctypes")
 else:
     hiddenimports = ["keyring.backends.SecretService"]
 

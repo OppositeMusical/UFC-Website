@@ -99,7 +99,7 @@ There is **no IPC bridge**. `preload.js` exposes only `window.ufcPredictor.isDes
 | Desktop app UI | Jinja2 templates + vanilla JS/CSS | No build step; simplest to package with PyInstaller |
 | Desktop app DB | SQLite via SQLAlchemy 2.0 ORM | Zero-config, file-based, fits single-user desktop app; no Alembic — a `schema_version` row plus small hand-written additive upgrades instead |
 | Vector store | ChromaDB `PersistentClient`, bundled default ONNX MiniLM embedding function | Fully local embeddings, no API key or GPU needed; avoids the multi-GB torch/sentence-transformers dependency that default embeddings via `sentence-transformers` would pull in |
-| Secrets (API keys) | `keyring` (Windows Credential Manager backend, explicitly selected) with a Fernet-encrypted-file fallback | OS-native secret storage; explicit backend selection avoids `keyring`'s auto-detection being unreliable once frozen by PyInstaller |
+| Secrets (API keys) | `keyring` (Credential Manager / Keychain, backend named explicitly per platform) with a Fernet-encrypted-file fallback | OS-native secret storage; naming the backend avoids `keyring`'s auto-detection, which is unreliable once frozen. See §11 for a verified limitation in packaged Windows builds |
 | Desktop shell | Electron + electron-builder (portable zip) | Gives the local Flask app a real window without rewriting the UI. Ships portable rather than installed so the app and its data live in one user-chosen folder (§13.1). Kept on a supported Electron major — the version electron-builder pulls in by default carried 17 CVEs, and unlike build tooling the runtime ships to users |
 | Backend bundling | PyInstaller, **onedir** mode | Onefile re-extracts 150–300MB to a temp directory on every launch (slow, triggers more antivirus false positives); onedir starts fast, and Electron copies the folder in as `resources/backend` |
 | Marketing site | React + Vite | Componentized landing page, matches prior project scaffolding intent |
@@ -349,7 +349,20 @@ vectors).
 
 ## 11. Security Notes
 
-- API keys are never stored in plaintext files. `keyring` with the Windows Credential Manager backend explicitly selected is the primary store; a Fernet-encrypted file (key derived from a per-install random value with restricted ACLs) is the fallback if `keyring` raises. The fallback protects against casual disk inspection, not a determined local attacker with full OS access to the same user account — acceptable for a single-user local desktop tool.
+- API keys are never stored in plaintext files. `keyring` (Credential Manager on Windows, Keychain on macOS) is the *intended* primary store, with a Fernet-encrypted file — key derived from a per-install random value with restricted ACLs — as the fallback if `keyring` raises. The fallback protects against casual disk inspection, not a determined local attacker with full OS access to the same user account; acceptable for a single-user local desktop tool.
+
+  **Known limitation, verified in the packaged Windows build (v0.4.0):** the
+  frozen app does *not* reach the Credential Manager and always uses the
+  encrypted-file fallback. `keyring` selects `WinVaultKeyring` successfully,
+  but the write fails inside `win32ctypes`, whose cffi backend cannot build
+  its FFI under PyInstaller. `cffi` is bundled because chromadb depends on
+  it, so `win32ctypes` picks cffi over its freeze-friendly ctypes backend and
+  there is no supported way to override that choice. Every Windows release to
+  date has behaved this way — keys are encrypted at rest either way, so the
+  practical impact is losing OS-level protection, not exposing plaintext.
+  `keyring_store` now logs the reason rather than swallowing it, which is how
+  this was finally found: running from the virtualenv works, so the bug is
+  only visible by probing the frozen exe.
 - No telemetry, no external data collection beyond the user's own configured AI provider calls and the user-initiated `ufc.com` scrape.
 - All app data (SQLite DB, Chroma persistent directory, Fernet fallback key file) lives under `%LOCALAPPDATA%\UFCPredictor\`, never inside the installed program directory (which may be read-only).
 

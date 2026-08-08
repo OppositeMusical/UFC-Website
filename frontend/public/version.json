@@ -1,23 +1,24 @@
 {
-  "version": "0.3.2",
-  "releasedAt": "2026-08-06",
+  "version": "0.4.0",
+  "releasedAt": "2026-08-08",
   "releaseNotes": [
-    "Fix: picking a fighter from the dropdown no longer clears its own selection - predictions were failing with 'Pick both fighters from the autocomplete dropdown'",
-    "Fix: the dropdown no longer reopens right after you choose"
+    "macOS support added to the codebase (build tooling in macos/); no Mac binary is published yet",
+    "Keyring failures are now logged instead of silently falling back - see SPEC section 11",
+    "No functional changes for Windows users"
   ],
   "platforms": {
     "win": {
-      "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/MMA-Assist-0.3.2-portable-win64.zip",
-      "fileName": "MMA-Assist-0.3.2-portable-win64.zip",
+      "downloadUrl": "/downloads/MMA-Assist-0.4.0-portable-win64.zip",
+      "fileName": "MMA-Assist-0.4.0-portable-win64.zip",
       "kind": "portable",
-      "sizeBytes": 243867732,
-      "sha256": "be52f404a8afba756f9aaf1c1fe87b12341e3e5612c3877464fed2fd6d18332f"
+      "sizeBytes": 243922102,
+      "sha256": "c6db95e8acd2e93ac470d9c38d48e181b87ecc5d93d536439c64a68d2697c5b4"
     }
   },
-  "notes": "Points at the latest GitHub release of OppositeMusical/UFC-Website. Create that release and upload MMA-Assist-0.3.2-portable-win64.zip as an asset, or the link 404s.",
-  "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/MMA-Assist-0.3.2-portable-win64.zip",
-  "fileName": "MMA-Assist-0.3.2-portable-win64.zip",
+  "notes": "Served locally out of frontend/public/downloads by `npm run dev` / `npm run build`. For a public release, re-run with --github-release OWNER/REPO after uploading the installer.",
+  "downloadUrl": "/downloads/MMA-Assist-0.4.0-portable-win64.zip",
+  "fileName": "MMA-Assist-0.4.0-portable-win64.zip",
   "kind": "portable",
-  "sizeBytes": 243867732,
-  "sha256": "be52f404a8afba756f9aaf1c1fe87b12341e3e5612c3877464fed2fd6d18332f"
+  "sizeBytes": 243922102,
+  "sha256": "c6db95e8acd2e93ac470d9c38d48e181b87ecc5d93d536439c64a68d2697c5b4"
 }

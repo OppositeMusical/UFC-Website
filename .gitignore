@@ -52,3 +52,10 @@ backend/newuser_test_data/
 Thumbs.db
 .vscode/
 .idea/
+
+# Java accounts service
+accounts/target/
+
+# Scratch virtualenv used to run the licensing tests without the full
+# backend dependency set (chromadb and friends).
+.venv-lic/

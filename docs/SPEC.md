@@ -11,6 +11,13 @@ Two decoupled deliverables:
 
 **Non-goals for v1**: user accounts/auth, cloud sync, mobile apps, real-money betting integration, macOS/Linux packaging (Windows-only for v1; the app runs fine on macOS/Linux from source since Flask/Python are cross-platform, but only Windows gets a packaged build).
 
+> **Superseded in part.** Accounts, payments and a paid tier are designed and
+> partly built in [`ACCOUNTS_AND_PAYMENTS_SPEC.md`](ACCOUNTS_AND_PAYMENTS_SPEC.md)
+> — a Java service (`accounts/`) plus offline licence verification in
+> `backend/app/services/licensing/`. Nothing is deployed and the app does not
+> yet gate any feature, so §1 and §11 still describe the shipped product; they
+> stop being true the day that service goes live.
+
 **Disclaimer (shown in-app and on the landing site)**: predictions are for informational/entertainment purposes only. This is not financial or gambling advice, and the app does not place bets or wagers. Users are responsible for complying with the laws and platform terms that apply to them.
 
 ## 2. Architecture
@@ -364,6 +371,13 @@ vectors).
   this was finally found: running from the virtualenv works, so the bug is
   only visible by probing the frozen exe.
 - No telemetry, no external data collection beyond the user's own configured AI provider calls and the user-initiated `ufc.com` scrape.
+
+  **This claim has an expiry date.** Once the accounts service ships, an
+  activated install contacts it to fetch and refresh a licence token — an email
+  address, a device record and a session IP leave the machine. Still no
+  telemetry and still nothing about predictions or chats, but "no external data
+  collection" would no longer be accurate, and this bullet, the README and the
+  Download page's privacy copy all have to change on the same day.
 - All app data (SQLite DB, Chroma persistent directory, Fernet fallback key file) lives under `%LOCALAPPDATA%\UFCPredictor\`, never inside the installed program directory (which may be read-only).
 
 ## 12. Folder Structure

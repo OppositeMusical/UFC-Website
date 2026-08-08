@@ -6,7 +6,8 @@ An MMA-themed product in three parts:
 |---|---|
 | **`backend/`** | The application: Python/Flask, serving its own UI (Jinja + vanilla JS). Local (Ollama) or cloud AI (OpenAI, Gemini, Deepseek, Claude), PrizePicks/DraftKings/Kalshi prediction pages, a chatbot, and a ChromaDB RAG layer over real UFC fighter stats. |
 | **`desktop/`** | The Electron shell that ships it as a Windows desktop app. Spawns the backend as a child process and renders its UI in a native window. **This is the shipped product.** |
-| **`frontend/`** | A static marketing site (React + Vite) that explains the product and serves the installer. |
+| **`frontend/`** | A static marketing site (React + Vite) that explains the product and serves the installer. Also the pricing, sign-in and account pages. |
+| **`accounts/`** | Java/Spring Boot service for accounts, Stripe payments and desktop licence tokens. **Built but not deployed** — see [`accounts/README.md`](accounts/README.md). |
 
 **Full technical spec** — architecture, data models, API contracts, scraper ethics, packaging, versioning: [`docs/SPEC.md`](docs/SPEC.md).
 **Electron shell design notes**: [`desktop/README.md`](desktop/README.md).

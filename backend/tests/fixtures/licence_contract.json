@@ -1,0 +1,25 @@
+{
+  "_note" : "Shared Java/Python contract for the licence token. The signing key is generated for this fixture and used nowhere else. See LicenceContractTest for how to regenerate.",
+  "signingKey" : "K/b/ID/wKNTRtWH2sPCmS98uGG9B/CBNFN3lVDIPin7AI219FG7Tz2jimWvwW9uY4kAJUjCe8gA1+HGZF1yYWQ==",
+  "publicKeyBase64Url" : "wCNtfRRu089o4plr8FvbmOJACVIwnvIANfhxmRdcmFk",
+  "kid" : "contract-test",
+  "issuer" : "https://api.mmaassist.test",
+  "audience" : "mma-assist-desktop",
+  "expectedClaims" : {
+    "sub" : "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0",
+    "device" : "11112222-3333-4444-5555-666677778888",
+    "jti" : "99998888-7777-6666-5555-444433332222",
+    "tier" : "pro",
+    "email" : "contract@example.test",
+    "iat" : 1786190400,
+    "exp" : 1787400000,
+    "grace_days" : 7,
+    "features" : {
+      "cloud_providers" : true,
+      "all_platforms" : true,
+      "kalshi_market" : true,
+      "unlimited_history" : true
+    }
+  },
+  "token" : "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImNvbnRyYWN0LXRlc3QifQ.eyJpc3MiOiJodHRwczovL2FwaS5tbWFhc3Npc3QudGVzdCIsInN1YiI6IjBmMWUyZDNjLTRiNWEtNjk3OC04Nzk2LWE1YjRjM2QyZTFmMCIsImF1ZCI6Im1tYS1hc3Npc3QtZGVza3RvcCIsImp0aSI6Ijk5OTk4ODg4LTc3NzctNjY2Ni01NTU1LTQ0NDQzMzMzMjIyMiIsImlhdCI6MTc4NjE5MDQwMCwiZXhwIjoxNzg3NDAwMDAwLCJ0aWVyIjoicHJvIiwiZmVhdHVyZXMiOnsiY2xvdWRfcHJvdmlkZXJzIjp0cnVlLCJhbGxfcGxhdGZvcm1zIjp0cnVlLCJrYWxzaGlfbWFya2V0Ijp0cnVlLCJ1bmxpbWl0ZWRfaGlzdG9yeSI6dHJ1ZX0sImRldmljZSI6IjExMTEyMjIyLTMzMzMtNDQ0NC01NTU1LTY2NjY3Nzc3ODg4OCIsImdyYWNlX2RheXMiOjcsImVtYWlsIjoiY29udHJhY3RAZXhhbXBsZS50ZXN0In0.gIK1QQPZ93JlZD27xO376huY6H6FMyzWp87V9btzSg2MyfNQYJrDP1g8_71FNdYaWyGx647gvde8G5dHAHOLDg"
+}

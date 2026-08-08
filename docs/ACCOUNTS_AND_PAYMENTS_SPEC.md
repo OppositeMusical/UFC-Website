@@ -1,11 +1,19 @@
 # Accounts & Payments — Design Spec
 
-Status: design, written before implementation (same convention as [`SPEC.md`](SPEC.md)).
+Status: **partly built.** Phases 1–6 are implemented on the
+`claude/accounts-payments-impl-test` branch; see [§17](#17-implementation-status)
+for exactly what exists, what the code does differently from this design, and
+what is still missing.
 Scope: a **Java/Spring Boot service** that owns user accounts, Stripe payments, and
-the licence tokens the desktop app checks. Nothing here is built yet.
+the licence tokens the desktop app checks.
 
 Read [`SPEC.md`](SPEC.md) first — this document assumes its architecture and
 changes two of its stated non-goals.
+
+> **Where the schema is defined.** The DDL quoted in §6.1 and §7.2 is the
+> design sketch. The authoritative schema is
+> `accounts/src/main/resources/db/migration/`; §17.2 lists every place the two
+> deliberately differ.
 
 ---
 
@@ -54,7 +62,7 @@ bounded. Nothing in the design depends on the language choice.
 
 | Decision | Choice | Why |
 |---|---|---|
-| Language / framework | Java 21, Spring Boot 3.5, Maven | Java 21 is installed and LTS; Boot gives OAuth2 client + resource server, Actuator, and Flyway wiring out of the box |
+| Language / framework | Java 21, Spring Boot 3.5, Maven | Java 21 is installed and LTS; Boot gives Actuator and Flyway wiring out of the box. Spring Security is deliberately *not* used — see §17.2 |
 | Deployable count | **One** service, three internal modules | §5.1 |
 | Database | PostgreSQL 16, managed (Railway) | Money needs transactions, constraints, and `numeric`/`timestamptz`. SQLite is right for the desktop app and wrong here |
 | Schema migrations | Flyway | Versioned, checked into git, runs on boot. Unlike the desktop app (which uses hand-written additive upgrades) this DB has real referential integrity to protect |
@@ -339,9 +347,10 @@ receive the redirect directly — no polling, no copy-pasted codes.
 3. User  signs in with Google/GitHub in a browser they already trust
 4. API   302 → the loopback URI with ?code=…&state=…
 5. App   POST /v1/auth/desktop/token {code, code_verifier, install_id, app_version}
-         → { access_token (JWT, 15 min), refresh_token (opaque, 90 d),
-             licence_token (§8), account }
-6. App   stores refresh + licence token in the data dir; shows the account panel
+         → { access_token (opaque, 15 min), refresh_token (opaque, 90 d),
+             account_id, device_id }
+6. App   POST /v1/licence with that access token → the licence token (§8)
+7. App   stores refresh + licence token in the data dir; shows the account panel
 ```
 
 `redirect_uri` is validated against `^http://127\.0\.0\.1:\d{1,5}/account/callback$`
@@ -893,3 +902,83 @@ problem with no tooling behind it.
 8. **Email delivery.** Receipts come from Stripe, but dunning notices and
    account-deletion confirmations need a sender (Resend/Postmark). Unbudgeted
    above; roughly half a day in phase 7.
+
+---
+
+## 17. Implementation status
+
+Written after building phases 1–6. This section is the difference between the
+design above and the code that exists, so the two stop disagreeing silently.
+
+### 17.1 What exists
+
+| Phase | State |
+|---|---|
+| 0 — Stripe approval, domain, legal pages | **Not done.** Still the gating risk (§4.2) |
+| 1 — Service skeleton, Postgres, Flyway, Docker, CI | Done. `accounts/`, five migrations, `Dockerfile`, `railway.json`, `.github/workflows/accounts.yml` |
+| 2 — Identity: OAuth, accounts, sessions, devices | Done. Google + GitHub brokers, linking rules, web and desktop flows |
+| 3 — Billing: plans, Checkout, webhooks, entitlements, Portal | Done, against placeholder Stripe price ids |
+| 4 — Licensing: Ed25519, JWKS, devices, contract test | Done |
+| 5 — Desktop integration | **Partly.** `backend/app/services/licensing/` (verify, evaluate, cache, client) exists and is tested. The Flask blueprint, Settings panel and feature gates are **not** written |
+| 6 — Website | Done: `/pricing`, `/login`, `/account`, `/checkout/success`, API client |
+| 7 — Hardening | **Not done.** Reconciliation exists but nothing alerts on it; no restore drill; no dunning email; live keys not configured |
+
+**Tests: 126, of which 122 run without Docker.** 90 Java (4 Testcontainers
+tests skip without a Docker daemon), 28 Python, 8 new frontend. The Java suite
+covers the entitlement calculator exhaustively, webhook signature verification
+against real HMACs, OAuth linking, refresh-token reuse detection, and the
+open-redirect and loopback-URI guards.
+
+One real bug was found by its own test while writing this: a webhook POST with
+no `Stripe-Signature` header threw `NullPointerException` inside the Stripe SDK
+and would have returned 500 instead of 400.
+
+### 17.2 Where the code differs from the design above, and why
+
+- **No Spring Security.** The auth surface is "opaque token → row → account",
+  and the CSRF machinery that would justify the framework is unused: the
+  session cookie is `SameSite=Lax`, which is the CSRF defence. Headers are set
+  explicitly by `SecurityHeadersFilter`; endpoints declare their own
+  requirement by taking an `AuthPrincipal` parameter. Revisit if this service
+  ever grows roles or scopes.
+- **No `citext`, no `inet`, no `jsonb`.** `create extension` needs superuser,
+  which a managed Postgres does not guarantee, so case-insensitive email
+  uniqueness is a `unique index on (lower(email))` instead. IPs are `text`.
+  JSON columns are `text` because nothing queries inside them and the mapping
+  could only be validated against a live database; promoting one later is a
+  single `ALTER`.
+- **One `sessions` table serves browsers and desktop apps**, distinguished by a
+  `kind` column, rather than a separate access-token table. Both are "an opaque
+  secret that maps to an account", and one lookup path means one place to get
+  revocation and expiry right.
+- **Desktop access tokens are opaque, not JWTs.** That leaves exactly one JWT
+  in the system — the licence token — which Java only signs and Python only
+  verifies. It also makes desktop revocation instant.
+- **Four schemas, not two:** `platform` (audit), `identity`, `billing`,
+  `licensing`. `licence_tokens` moved out of `billing` so the module named on
+  the table is the module that owns it.
+- **`/v1/auth/desktop/token` does not return a licence.** The app calls
+  `/v1/licence` afterwards. Returning it inline would have made `identity`
+  depend on `licensing`, which depends on `billing`, which depends on
+  `identity` — a cycle. The extra round trip buys an acyclic module graph.
+- **Two endpoints were added:** `GET /v1/auth/providers` (which sign-in buttons
+  to render) and `GET /v1/billing/summary`. `/v1/me` returns account,
+  entitlement, linked providers and devices — subscription detail lives on the
+  billing endpoint rather than being folded in.
+- **`plans.interval` is `billing_interval`**, because `interval` is a reserved
+  word in PostgreSQL.
+- **`subscriptions.source_event_at`** was added. Stripe does not order webhook
+  deliveries, and without a timestamp to compare against, a retried `past_due`
+  arriving after the `active` that resolved it would cut off a customer who has
+  already paid.
+
+### 17.3 What is deliberately still missing
+
+- Everything in phase 0 and phase 7 above.
+- The desktop app's Flask blueprint, Settings account panel, and the
+  `requires_pro` feature gates. The verification half is done and tested; the
+  UI half is not.
+- Dunning email. Stripe sends receipts, but a failed-payment notice needs a
+  sender (Resend or Postmark), which nothing here configures.
+- Any live Stripe call. Every Stripe interaction in the test suite is against
+  constructed fixtures, and no live or test-mode key has been used.

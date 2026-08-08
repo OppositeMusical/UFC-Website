@@ -1,0 +1,128 @@
+spring:
+  application:
+    name: accounts
+
+  datasource:
+    # Railway injects DATABASE_URL in libpq form (postgres://user:pass@host/db),
+    # which is not a JDBC URL. DatabaseUrlEnvironmentPostProcessor translates it
+    # before this file is resolved; these defaults are for local development.
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/mmaassist}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+
+  jpa:
+    hibernate:
+      # The schema is Flyway's job. `validate` turns a drifted entity into a
+      # startup failure instead of a runtime surprise halfway through a payment.
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate.jdbc.time_zone: UTC
+
+  flyway:
+    enabled: true
+    # The history table lives in `platform`; each migration creates the schema
+    # it owns.
+    schemas: platform
+    default-schema: platform
+
+  jackson:
+    default-property-inclusion: non_null
+
+server:
+  port: ${PORT:8080}
+  # Railway terminates TLS at its edge, so without this the app builds http://
+  # redirect URLs and the OAuth callback breaks in production only.
+  forward-headers-strategy: framework
+  error:
+    whitelabel:
+      enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: never
+      # A Stripe blip must not restart the service, so only the database counts
+      # toward liveness.
+      group:
+        readiness:
+          include: db
+  health:
+    defaults:
+      enabled: false
+    db:
+      enabled: true
+
+logging:
+  level:
+    com.mmaassist.accounts: ${LOG_LEVEL:INFO}
+
+app:
+  site-origin: ${SITE_ORIGIN:http://localhost:5173}
+  api-base-url: ${API_BASE_URL:http://localhost:8080}
+
+  session:
+    cookie-name: mma_session
+    cookie-domain: ${SESSION_COOKIE_DOMAIN:}
+    cookie-secure: ${SESSION_COOKIE_SECURE:false}
+    ttl: 30d
+
+  desktop:
+    access-token-ttl: 15m
+    refresh-token-ttl: 90d
+    authorization-code-ttl: 60s
+    device-limit: 5
+
+  oauth:
+    google:
+      client-id: ${GOOGLE_CLIENT_ID:}
+      client-secret: ${GOOGLE_CLIENT_SECRET:}
+      authorization-uri: https://accounts.google.com/o/oauth2/v2/auth
+      token-uri: https://oauth2.googleapis.com/token
+      user-info-uri: https://openidconnect.googleapis.com/v1/userinfo
+    github:
+      client-id: ${GITHUB_CLIENT_ID:}
+      client-secret: ${GITHUB_CLIENT_SECRET:}
+      authorization-uri: https://github.com/login/oauth/authorize
+      token-uri: https://github.com/login/oauth/access_token
+      user-info-uri: https://api.github.com/user
+      user-emails-uri: https://api.github.com/user/emails
+
+  stripe:
+    secret-key: ${STRIPE_SECRET_KEY:}
+    webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+    # Stripe's own tolerance for replayed webhook timestamps.
+    webhook-tolerance: 5m
+    # A failed renewal is usually an expired card, not a lapsed customer.
+    # Stripe's Smart Retries run for ~2 weeks; cutting access on day one turns a
+    # card update into a refund request.
+    dunning-grace: 7d
+
+  licence:
+    # Base64 (or base64url) encoded raw 32-byte Ed25519 seed. Left blank in
+    # development, where an ephemeral key is generated at startup and the public
+    # half is logged so the desktop app can be pointed at it.
+    signing-key: ${LICENCE_SIGNING_KEY:}
+    kid: ${LICENCE_SIGNING_KID:dev}
+    issuer: ${API_BASE_URL:http://localhost:8080}
+    audience: mma-assist-desktop
+    # Short enough that a refund stops mattering quickly, long enough that a
+    # fortnight offline never locks anyone out.
+    subscription-ttl: 14d
+    lifetime-ttl: 180d
+    grace-days: 7
+
+  webhook-processing:
+    poll-interval: 5s
+    batch-size: 20
+    max-attempts: 5
+
+  reconciliation:
+    # 03:15 UTC daily. Webhooks are best-effort; Stripe stops retrying after
+    # three days, so this is the backstop that closes the gap.
+    cron: ${RECONCILIATION_CRON:0 15 3 * * *}
+    lookback: 48h

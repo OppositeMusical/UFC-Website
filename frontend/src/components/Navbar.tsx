@@ -4,8 +4,10 @@ import { Link, useLocation } from "react-router-dom";
 const LINKS = [
   { to: "/#features", label: "Features" },
   { to: "/#how-it-works", label: "How It Works" },
+  { to: "/pricing", label: "Pricing" },
   { to: "/download", label: "Download" },
   { to: "/about", label: "About" },
+  { to: "/account", label: "Account" },
 ];
 
 export default function Navbar() {

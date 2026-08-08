@@ -1,0 +1,60 @@
+name: accounts service
+
+# Scoped to the paths this actually covers. The rest of the repo has no CI yet;
+# adding it is worth doing, but it is not this change's job and a workflow that
+# fails on unrelated code teaches people to ignore red.
+on:
+  push:
+    paths:
+      - "accounts/**"
+      - "backend/app/services/licensing/**"
+      - "backend/tests/test_licensing*.py"
+      - "backend/tests/fixtures/licence_contract.json"
+      - ".github/workflows/accounts.yml"
+  pull_request:
+    paths:
+      - "accounts/**"
+      - "backend/app/services/licensing/**"
+      - "backend/tests/test_licensing*.py"
+      - "backend/tests/fixtures/licence_contract.json"
+      - ".github/workflows/accounts.yml"
+
+jobs:
+  java:
+    name: Java tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+          cache: maven
+
+      # Docker is available on hosted runners, so the Testcontainers
+      # integration tests that skip locally do run here. They are the only
+      # check that the Flyway migrations apply and that the JPA mappings match
+      # the columns they claim.
+      - name: mvn verify
+        working-directory: accounts
+        run: mvn -B verify
+
+  licensing-contract:
+    name: Desktop licence verifier
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Deliberately not the full backend requirements: these two test files
+      # need a verifier and an HTTP client, not chromadb and four AI SDKs.
+      - name: Install the licensing test dependencies
+        run: pip install pytest cryptography requests "Flask>=3.0,<4.0" "SQLAlchemy>=2.0,<3.0" "platformdirs>=4.0,<5.0"
+
+      - name: Verify Java-signed tokens still verify in Python
+        working-directory: backend
+        run: python -m pytest tests/test_licensing_token.py tests/test_licensing_contract.py -q

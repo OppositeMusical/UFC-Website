@@ -1,0 +1,74 @@
+name: Release checks
+
+# Runs when a version tag is pushed.
+#
+# What this does NOT do is build the Windows artifact, and that is a constraint
+# of the project rather than an omission. The packaged app bundles a pre-scraped
+# seed database (SPEC.md section 10) which is gitignored, ~28MB, and produced by
+# a multi-hour crawl of ufc.com that honours a 15-second crawl delay. CI cannot
+# regenerate it, and building without it would ship an app whose first run has
+# an empty fighter database. Packaging therefore stays manual, on a machine that
+# has the seed.
+#
+# What CI *can* do is refuse to bless a tag whose version numbers disagree,
+# which is the failure the README explicitly warns about: the release chain is
+# four steps feeding each other and "nothing detects a stale input".
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to check, without the leading v (e.g. 0.5.0)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  consistency:
+    name: Version consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Resolve the version under test
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          echo "value=${version}" >> "$GITHUB_OUTPUT"
+          echo "Checking release ${version}"
+
+      - name: Check that every version source agrees
+        run: node .github/scripts/check-release.mjs "${{ steps.version.outputs.value }}"
+
+      - name: Remaining manual steps
+        if: success()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ### Version sources agree
+
+          CI has checked the numbers, not the binaries. These steps still happen
+          on a machine that holds the seed database:
+
+          1. `pyinstaller backend/pyinstaller/app.spec` — rebuild whenever
+             `backend/` changed. electron-builder copies the output in verbatim
+             and cannot tell that the Python source moved on.
+          2. `cd desktop && npm run dist` — wraps it into the portable zip.
+          3. `python backend/scripts/build_release.py --github-release OWNER/REPO`
+             — regenerates `version.json` with the real size and SHA-256.
+          4. Commit the regenerated `version.json`. Publishing that manifest is
+             the only step that announces the release, to the Download page and
+             to installed copies polling for updates alike.
+
+          The build is still signed with a self-signed certificate, so public
+          downloads trip SmartScreen (SPEC.md section 13.1).
+          EOF

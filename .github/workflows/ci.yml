@@ -1,0 +1,232 @@
+name: CI
+
+# Deliberately no `paths:` filters.
+#
+# Path-filtered workflows do not run at all on an unrelated change, which means
+# a required status check never arrives and a pull request sits "expected -
+# waiting" forever. The previous workflow was filtered to accounts/**, and the
+# practical effect was that most of the repository had no CI at all. This one
+# runs everything on everything: the whole suite is a few minutes in parallel,
+# which is cheaper than the class of bug an unfiltered gate catches.
+on:
+  # Only `branches` is given, so tag pushes do not trigger this at all -
+  # release.yml owns those, and the commit being tagged has already been tested
+  # on its branch.
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch makes the older run irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write # only used by the image job on main
+
+jobs:
+  accounts:
+    name: Java · accounts service
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+          cache: maven
+
+      # Hosted runners have a Docker daemon, so the Testcontainers integration
+      # tests run here rather than skipping. That is not incidental: they are
+      # the only check that the Flyway migrations apply and that every JPA
+      # mapping matches its column, and a schema-validation failure that
+      # stopped the service booting at all was caught by exactly this step.
+      - name: mvn verify
+        working-directory: accounts
+        run: mvn -B verify
+
+      # Surefire's XML is the useful artifact when something fails at 2am and
+      # the log has already scrolled past the assertion.
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: accounts-surefire-reports
+          path: accounts/target/surefire-reports/
+          retention-days: 7
+
+  backend:
+    name: Python · desktop app backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      # Includes the licence verifier and the cross-language contract test
+      # (test_licensing_contract.py), which asserts a token produced by the Java
+      # signer still verifies here.
+      - name: pytest
+        working-directory: backend
+        run: pytest tests -q
+
+  frontend:
+    name: Node · marketing site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        working-directory: frontend
+        run: npm ci
+
+      # `npm run build` is `tsc -b && vite build`, so this is the type check as
+      # well as the bundle.
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Test
+        working-directory: frontend
+        run: npm test
+
+  desktop:
+    name: Node · Electron shell
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      # --ignore-scripts skips Electron's postinstall, which downloads a ~100MB
+      # binary this job has no use for. What is being checked is that the
+      # lockfile still resolves and the shell's sources still parse; there are
+      # no tests here to run, and a packaged build belongs in release.yml.
+      - name: Install without downloading Electron
+        working-directory: desktop
+        run: npm ci --ignore-scripts
+
+      - name: Syntax-check the shell
+        working-directory: desktop
+        run: node --check main.js && node --check backend.js && node --check preload.js
+
+  image:
+    name: Docker · accounts image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Builds on every branch, publishes only from main. Building everywhere is
+      # the point: the Dockerfile is what production actually runs, and a build
+      # that is only exercised at deploy time is discovered broken at the worst
+      # possible moment.
+      - name: Log in to GHCR
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build (and publish from main)
+        uses: docker/build-push-action@v6
+        with:
+          context: accounts
+          push: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+          tags: |
+            ghcr.io/${{ github.repository }}/accounts:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/accounts:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  gate:
+    name: all green
+    # The single check to require in branch protection. Every other job feeds
+    # this one, so adding a job later does not mean editing the protection rule.
+    if: always()
+    needs: [accounts, backend, frontend, desktop, image]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if anything upstream failed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: |
+          echo "One or more CI jobs failed:"
+          echo '${{ toJSON(needs) }}'
+          exit 1
+      - run: echo "All CI jobs passed."
+
+  # ---------------------------------------------------------------------------
+  # Deployment. Inert until secrets are configured - see docs/CI_CD.md.
+  # ---------------------------------------------------------------------------
+
+  deploy-config:
+    name: deployment config
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [gate]
+    runs-on: ubuntu-latest
+    outputs:
+      railway: ${{ steps.probe.outputs.railway }}
+    steps:
+      # Secrets cannot be read in a job-level `if`, so presence is turned into
+      # an output here and the deploy jobs branch on that.
+      - id: probe
+        run: echo "railway=${{ secrets.RAILWAY_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy ${{ matrix.service }} to Railway
+    needs: [deploy-config]
+    if: needs.deploy-config.outputs.railway == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      # One at a time: both services share a database, and a half-deployed pair
+      # is harder to reason about than a slow one.
+      max-parallel: 1
+      matrix:
+        include:
+          - service: accounts
+            directory: accounts
+          - service: frontend
+            directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Unpinned deliberately for now: this path has never been run, and
+      # pinning a version guessed rather than verified would fail confidently.
+      # Pin it the first time it succeeds.
+      - name: Install the Railway CLI
+        run: npm i -g @railway/cli
+
+      - name: Deploy
+        working-directory: ${{ matrix.directory }}
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service "${{ matrix.service }}" --detach

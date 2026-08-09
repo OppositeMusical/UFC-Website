@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 .venv/
+.venv*/
 *.egg-info/
 
 # Backend runtime/build artifacts
@@ -55,7 +56,3 @@ Thumbs.db
 
 # Java accounts service
 accounts/target/
-
-# Scratch virtualenv used to run the licensing tests without the full
-# backend dependency set (chromadb and friends).
-.venv-lic/

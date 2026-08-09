@@ -70,10 +70,16 @@ npm test         # vitest
 ```powershell
 cd backend  ; .venv\Scripts\Activate.ps1 ; pip install -r requirements-dev.txt ; pytest tests
 cd frontend ; npm test
+cd accounts ; mvn verify
 ```
 
-84 backend tests, 13 frontend tests. No network calls — the scraper, AI
-providers, and update checks are all exercised against mocked HTTP.
+112 backend tests, 34 frontend tests, 106 accounts tests. No network calls — the
+scraper, AI providers, update checks and Stripe are all exercised against
+mocked HTTP or fixtures.
+
+All of it runs on every push via [`.github/workflows/ci.yml`](.github/workflows/ci.yml);
+see [`docs/CI_CD.md`](docs/CI_CD.md) for the pipeline, the deploy wiring, and
+why the Windows artifact still has to be built by hand.
 
 ## Cutting a release
 

@@ -136,10 +136,26 @@ jobs:
   image:
     name: Docker · accounts image
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      actions: write # buildx exports its layer cache through the Actions cache API
     steps:
       - uses: actions/checkout@v4
 
       - uses: docker/setup-buildx-action@v3
+
+      # A Docker reference must be lowercase, and this repository is
+      # `OppositeMusical/UFC-Website`. Interpolating github.repository straight
+      # into a tag produced an invalid reference, which buildx rejects while
+      # parsing arguments - the job failed in one second, before a single layer
+      # was built.
+      - name: Compute the image name
+        id: image
+        run: |
+          name="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/accounts"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          echo "Image: ${name}"
 
       # Builds on every branch, publishes only from main. Building everywhere is
       # the point: the Dockerfile is what production actually runs, and a build
@@ -159,8 +175,8 @@ jobs:
           context: accounts
           push: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
           tags: |
-            ghcr.io/${{ github.repository }}/accounts:${{ github.sha }}
-            ghcr.io/${{ github.repository }}/accounts:latest
+            ${{ steps.image.outputs.name }}:${{ github.sha }}
+            ${{ steps.image.outputs.name }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

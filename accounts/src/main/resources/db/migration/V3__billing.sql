@@ -83,7 +83,10 @@ create table billing.payments (
     currency         text        not null,
     status           text        not null,
     card_brand       text,                          -- Stripe-supplied display fields:
-    card_last4       char(4),                       -- safe to store, and support needs them
+    -- varchar(4), not char(4): PostgreSQL reports char(4) as `bpchar`, which
+    -- Hibernate's schema validation rejects against a String field, and the
+    -- blank-padding semantics of char buy nothing here.
+    card_last4       varchar(4),                    -- safe to store, and support needs them
     receipt_url      text,
     occurred_at      timestamptz not null,
     raw              text                           -- trimmed Stripe object, JSON

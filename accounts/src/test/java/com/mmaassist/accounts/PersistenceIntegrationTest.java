@@ -23,8 +23,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * Boots the real application against a real PostgreSQL.
@@ -44,17 +42,35 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * development environments. It is not optional in CI.
  */
 @SpringBootTest
-@Testcontainers
-@EnabledIf("dockerAvailable")
+@EnabledIf("databaseAvailable")
 class PersistenceIntegrationTest {
 
-    @Container
-    @SuppressWarnings("resource") // Testcontainers manages the lifecycle
+    /**
+     * Point this at an existing PostgreSQL to run without Docker, e.g.
+     * {@code TEST_DATABASE_URL=jdbc:postgresql://127.0.0.1:5432/mmaassist}
+     * (with {@code TEST_DATABASE_USER} / {@code TEST_DATABASE_PASSWORD}).
+     *
+     * <p>Worth the small amount of machinery: a sandbox with no Docker daemon
+     * silently skipped this whole class, and that is precisely how a
+     * schema-validation failure that stopped the service booting at all reached
+     * a commit. A test that cannot run is not a test.
+     */
+    private static final String LOCAL_URL = System.getenv("TEST_DATABASE_URL");
+
+    @SuppressWarnings("resource") // stopped by the JVM shutdown hook / Ryuk
     static final PostgreSQLContainer<?> POSTGRES =
             new PostgreSQLContainer<>("postgres:16-alpine")
                     .withDatabaseName("mmaassist")
                     .withUsername("test")
                     .withPassword("test");
+
+    static {
+        // Started here rather than by the @Testcontainers extension, which
+        // would insist on Docker even when a local database was supplied.
+        if (LOCAL_URL == null && dockerAvailable()) {
+            POSTGRES.start();
+        }
+    }
 
     static boolean dockerAvailable() {
         try {
@@ -64,8 +80,20 @@ class PersistenceIntegrationTest {
         }
     }
 
+    static boolean databaseAvailable() {
+        return LOCAL_URL != null || dockerAvailable();
+    }
+
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {
+        if (LOCAL_URL != null) {
+            registry.add("spring.datasource.url", () -> LOCAL_URL);
+            registry.add("spring.datasource.username",
+                    () -> System.getenv().getOrDefault("TEST_DATABASE_USER", "postgres"));
+            registry.add("spring.datasource.password",
+                    () -> System.getenv().getOrDefault("TEST_DATABASE_PASSWORD", "postgres"));
+            return;
+        }
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);

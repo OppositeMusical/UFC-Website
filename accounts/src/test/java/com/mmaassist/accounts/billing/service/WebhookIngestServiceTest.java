@@ -113,6 +113,44 @@ class WebhookIngestServiceTest {
                 .isInstanceOf(ApiException.class);
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "garbage", "[1,2]", "\"just a string\"", "42", "",
+    })
+    @DisplayName("a body that is not a JSON object is a 400, never a 500")
+    void unparseableBodyIsABadRequest(String body) {
+        // Regression test. Stripe's constructEvent deserialises before it
+        // verifies, so these throw an unchecked Gson error from inside the SDK.
+        // Uncaught, that was a 500 on an endpoint the entire internet can
+        // reach - anyone could manufacture server errors with curl.
+        String header = signatureHeader(body, SECRET, NOW.getEpochSecond());
+
+        assertThatThrownBy(() -> service.ingest(body, header))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> {
+                    ApiException api = (ApiException) e;
+                    assertThat(api.getStatus().is4xxClientError())
+                            .as("must be a client error, not a server error")
+                            .isTrue();
+                    assertThat(api.getCode()).isIn("invalid_payload", "invalid_signature");
+                });
+
+        verify(events, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("a signed payload carrying no event id is refused rather than hitting the primary key")
+    void payloadWithoutEventIdIsRejected() {
+        String body = "{\"object\":\"event\",\"type\":\"checkout.session.completed\"}";
+
+        assertThatThrownBy(() ->
+                service.ingest(body, signatureHeader(body, SECRET, NOW.getEpochSecond())))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).getCode()).isEqualTo("invalid_payload"));
+
+        verify(events, never()).save(any());
+    }
+
     @Test
     @DisplayName("re-delivery of an event we already hold changes nothing")
     void duplicateEventIsIgnored() {

@@ -91,7 +91,12 @@ public class StripeEventHandler {
     private void onCheckoutCompleted(JsonNode session, Instant eventAt) {
         UUID accountId = accountFromSession(session);
         if (accountId == null) {
-            log.warn("checkout session {} has no resolvable account", text(session, "id"));
+            // Money arrived that we cannot attribute to anybody. Retrying will
+            // not conjure an account, so the event is marked processed - but
+            // this is somebody's payment with nothing to show for it, and it
+            // needs a human today, not whenever someone reads the warnings.
+            log.error("PAYMENT UNATTRIBUTED: checkout session {} has no resolvable account; "
+                    + "reconcile it by hand", text(session, "id"));
             return;
         }
 

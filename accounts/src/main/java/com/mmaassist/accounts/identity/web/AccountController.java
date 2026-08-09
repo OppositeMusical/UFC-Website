@@ -7,6 +7,7 @@ import com.mmaassist.accounts.identity.service.DeviceService;
 import com.mmaassist.accounts.platform.security.AuthPrincipal;
 import com.mmaassist.accounts.platform.spi.EntitlementLookup;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.ResponseEntity;
@@ -67,20 +68,30 @@ public class AccountController {
         Account account = accountService.require(principal.accountId());
         EntitlementLookup.Snapshot entitlement = entitlements.forAccount(principal.accountId());
 
-        return Map.of(
-                "account", Map.of(
-                        "id", account.getId().toString(),
-                        "email", account.getEmail(),
-                        "displayName", String.valueOf(account.getDisplayName()),
-                        "createdAt", account.getCreatedAt().toString()),
-                "linkedProviders", accountService.linkedProviders(principal.accountId()),
-                "entitlement", Map.of(
-                        "tier", entitlement.tier(),
-                        "source", String.valueOf(entitlement.source())),
-                "devices", deviceService.list(principal.accountId()).stream()
-                        .map(DeviceView::from).toList(),
-                "note", "Payment history is available from the billing portal linked on your "
-                        + "account page.");
+        // LinkedHashMap rather than Map.of: an account with no display name has
+        // a genuine null there, and Map.of throws on one. The previous version
+        // sidestepped that with String.valueOf, which exported the four-letter
+        // string "null" as somebody's name.
+        Map<String, Object> accountData = new LinkedHashMap<>();
+        accountData.put("id", account.getId().toString());
+        accountData.put("email", account.getEmail());
+        accountData.put("displayName", account.getDisplayName());
+        accountData.put("createdAt", account.getCreatedAt().toString());
+
+        Map<String, Object> entitlementData = new LinkedHashMap<>();
+        entitlementData.put("tier", entitlement.tier());
+        entitlementData.put("source", entitlement.source());
+        entitlementData.put("validUntil", entitlement.validUntil());
+
+        Map<String, Object> export = new LinkedHashMap<>();
+        export.put("account", accountData);
+        export.put("linkedProviders", accountService.linkedProviders(principal.accountId()));
+        export.put("entitlement", entitlementData);
+        export.put("devices", deviceService.list(principal.accountId()).stream()
+                .map(DeviceView::from).toList());
+        export.put("note", "Payment history is available from the billing portal linked on your "
+                + "account page.");
+        return export;
     }
 
     public record MeResponse(AccountView account, EntitlementView entitlement,

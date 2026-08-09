@@ -73,6 +73,24 @@ public class WebhookIngestService {
             // controlled and would land unfiltered in the log.
             log.warn("rejected webhook with bad signature");
             throw ApiException.badRequest("invalid_signature", "Signature verification failed.");
+        } catch (RuntimeException e) {
+            // constructEvent deserialises the body *before* it checks the
+            // signature, so a payload that is not a JSON object throws an
+            // unchecked Gson error from inside the SDK. Uncaught, that is a 500
+            // on an endpoint the whole internet can reach - free log noise and
+            // error-budget alarms for anyone who feels like sending junk.
+            //
+            // Nothing has been verified at this point, so the response says
+            // nothing beyond "that was not a webhook".
+            log.warn("rejected unparseable webhook body ({})", e.getClass().getSimpleName());
+            throw ApiException.badRequest("invalid_payload", "Malformed webhook payload.");
+        }
+
+        if (event.getId() == null || event.getType() == null) {
+            // A signed payload that parses but carries no event id would blow up
+            // on the primary key. Belt and braces: Stripe never sends this.
+            log.warn("rejected webhook with no event id");
+            throw ApiException.badRequest("invalid_payload", "Webhook payload has no event id.");
         }
 
         if (events.existsById(event.getId())) {

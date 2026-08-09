@@ -49,7 +49,7 @@ public class Payment {
     @Column(name = "card_brand")
     private String cardBrand;
 
-    @Column(name = "card_last4", columnDefinition = "char(4)")
+    @Column(name = "card_last4", length = 4)
     private String cardLast4;
 
     @Column(name = "receipt_url")

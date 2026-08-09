@@ -116,7 +116,14 @@ public class Subscription {
         if (planId != null) {
             this.planId = planId;
         }
-        this.sourceEventAt = eventAt;
+        // Only ever move this forward. Reconciliation passes a null eventAt,
+        // meaning "Stripe told us directly, this is newer than anything we
+        // hold" - but assigning that null would erase the watermark and leave
+        // every subsequent out-of-order webhook accepted, silently undoing the
+        // guard above.
+        if (eventAt != null) {
+            this.sourceEventAt = eventAt;
+        }
         this.updatedAt = now;
         return true;
     }

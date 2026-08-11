@@ -76,14 +76,43 @@ describe("About the Developer page", () => {
     expect(screen.getByRole("link", { name: "About" })).toBeInTheDocument();
   });
 
-  it("renders a coming-soon placeholder with no biography content yet", () => {
+  it("names the developer and links to both profiles", () => {
     render(
       <MemoryRouter initialEntries={["/about"]}>
         <App />
       </MemoryRouter>
     );
-    expect(screen.getByRole("heading", { name: /About the Developer/i })).toBeInTheDocument();
-    expect(screen.getByText(/Coming soon/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Christepher Irving/i })).toBeInTheDocument();
+
+    const github = screen.getAllByRole("link", { name: /GitHub/i });
+    expect(github.length).toBeGreaterThan(0);
+    expect(github[0]).toHaveAttribute("href", "https://github.com/OppositeMusical");
+
+    const linkedin = screen.getAllByRole("link", { name: /LinkedIn/i });
+    expect(linkedin[0].getAttribute("href")).toContain("linkedin.com/in/christepher-irving");
+  });
+
+  it("no longer shows the coming-soon placeholder", () => {
+    render(
+      <MemoryRouter initialEntries={["/about"]}>
+        <App />
+      </MemoryRouter>
+    );
+    expect(screen.queryByText(/Coming soon/i)).not.toBeInTheDocument();
+  });
+
+  it("opens external profile links safely", () => {
+    // rel=noreferrer matters on target=_blank: without it the opened tab
+    // gets a handle on window.opener.
+    render(
+      <MemoryRouter initialEntries={["/about"]}>
+        <App />
+      </MemoryRouter>
+    );
+    for (const link of screen.getAllByRole("link", { name: /GitHub|LinkedIn/i })) {
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link.getAttribute("rel")).toContain("noreferrer");
+    }
   });
 });
 

@@ -1101,3 +1101,109 @@ a {
   from { opacity: 0; transform: translateY(14px) scale(0.96); }
   to   { opacity: 1; transform: none; }
 }
+
+/* ---------------------------------------------------------------------
+   About the Developer
+   --------------------------------------------------------------------- */
+.dev-profile {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 2rem 0 0.5rem;
+}
+
+/* The app's own icon, redrawn in CSS rather than shipped as an image -
+   one less asset, and it stays crisp at any size. */
+.dev-profile__mark {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 88px;
+  height: 88px;
+  border-radius: var(--radius-lg);
+  background: #000;
+  border: 1px solid var(--border-strong);
+  color: var(--accent-crimson);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.9rem;
+  letter-spacing: -0.02em;
+}
+
+.dev-profile__text h1 {
+  margin: 0 0 0.3rem;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(1.7rem, 4vw, 2.4rem);
+  line-height: 1.1;
+}
+
+.dev-profile__role {
+  margin: 0 0 0.85rem;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.dev-profile__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.dev-profile__links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.85rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--text-muted);
+  transition: color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.dev-profile__links a:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-crimson);
+  transform: translateY(-2px);
+}
+
+.dev-intro {
+  max-width: 68ch;
+  margin: 1.75rem 0 0.5rem;
+}
+
+.dev-intro p {
+  margin: 0 0 1.1rem;
+  color: var(--text-muted);
+  line-height: 1.75;
+}
+
+.dev-intro strong {
+  color: var(--text-primary);
+}
+
+.dev-cta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 620px) {
+  .dev-profile {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1.1rem;
+  }
+  .dev-profile__mark {
+    width: 68px;
+    height: 68px;
+    font-size: 1.5rem;
+  }
+}

@@ -168,6 +168,31 @@ the Electron app, the uninstaller and the installer, but only *copies*
 `backend/dist/UFCPredictor/UFCPredictor.exe` in as a resource — signing that
 afterwards leaves the copy inside the installer unsigned.
 
+### Recovering the password on this machine
+
+The password for `certs/code-signing.pfx` is 24 random bytes, stored
+DPAPI-encrypted at `certs/pfx-password.dpapi`. DPAPI binds it to this
+Windows account on this machine, so the file is useless if copied elsewhere
+and there is no plaintext copy anywhere — including in the shell history.
+
+Both steps above need it, so recover it into the two places it is consumed:
+
+```powershell
+$sec   = (Get-Content .\certs\pfx-password.dpapi | Select-Object -First 1) | ConvertTo-SecureString
+$bstr  = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
+$plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+
+.\scripts\sign-backend.ps1 -Password $plain
+$env:CSC_KEY_PASSWORD = $plain
+npm run dist
+```
+
+Forgetting `$env:CSC_KEY_PASSWORD` does not fail early or clearly — the build
+runs for several minutes and then dies on `SignTool Error: The specified PFX
+password is not correct`, which reads like a corrupt certificate rather than
+an unset variable.
+
 ### What this actually achieves
 
 On machines where you install the `.cer` into Trusted Root, the UAC prompt

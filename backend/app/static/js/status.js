@@ -47,24 +47,30 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const dismissKey = (version) => `ufcpredictor:update-dismissed:${version}`;
 
-  // Dismissal is per-version, so the banner comes back for the next release
-  // instead of being silenced forever by one click.
-  function show(version, detail, { dismissible = true } = {}) {
-    if (dismissible && localStorage.getItem(dismissKey(version))) return;
-    titleEl.textContent = `Version ${version} is available`;
+  // Which version a dismissal click would silence. Set by show(), read by the
+  // one click handler below - previously show() attached a fresh listener per
+  // call, which meant a state sequence that reached the banner without going
+  // through show() left the button inert.
+  let dismissVersion = null;
+
+  dismissEl.addEventListener("click", () => {
+    // Dismissal is per-version, so the banner comes back for the next release
+    // instead of being silenced forever by one click.
+    if (dismissVersion) localStorage.setItem(dismissKey(dismissVersion), "1");
+    hide();
+  });
+
+  function hide() {
+    banner.hidden = true;
+  }
+
+  function show({ version, title, detail, dismissible = true }) {
+    if (dismissible && localStorage.getItem(dismissKey(version))) return hide();
+    titleEl.textContent = title;
     detailEl.textContent = detail;
-    banner.hidden = false;
+    dismissVersion = dismissible ? version : null;
     dismissEl.hidden = !dismissible;
-    if (dismissible) {
-      dismissEl.addEventListener(
-        "click",
-        () => {
-          localStorage.setItem(dismissKey(version), "1");
-          banner.hidden = true;
-        },
-        { once: true }
-      );
-    }
+    banner.hidden = false;
   }
 
   const desktopUpdates = window.mmaAssist && window.mmaAssist.updates;
@@ -76,21 +82,36 @@ document.addEventListener("DOMContentLoaded", () => {
     linkEl.removeAttribute("target");
     linkEl.textContent = "Update";
 
-    desktopUpdates.onState((state) => {
-      if (state.status === "available") {
-        show(state.version, "Download and install it from Settings.");
-      } else if (state.status === "downloaded") {
-        titleEl.textContent = `Version ${state.version} is ready to install`;
-        detailEl.textContent = "Finish the update from Settings.";
-        banner.hidden = false;
-      } else if (state.status === "unsupported") {
-        checkViaServer();
-      }
-    });
-    desktopUpdates.state().then((state) => {
-      if (state.status === "unsupported") checkViaServer();
-    });
+    desktopUpdates.onState(renderBanner);
+    desktopUpdates.state().then(renderBanner);
     desktopUpdates.check();
+
+    function renderBanner(state) {
+      switch (state.status) {
+        case "available":
+          return show({
+            version: state.version,
+            title: `Version ${state.version} is available`,
+            detail: "Download and install it from Settings.",
+          });
+        case "downloaded":
+          return show({
+            version: state.version,
+            title: `Version ${state.version} is ready to install`,
+            detail: "Finish the update from Settings.",
+          });
+        case "unsupported":
+          // Portable build or a dev run - the main process can't update
+          // itself, so fall back to the manifest check.
+          return checkViaServer();
+        default:
+          // idle, checking, downloading, installing, not-available, error.
+          // None of these is a newer release the user can act on from here,
+          // and the banner must retract rather than keep asserting whatever
+          // it last said. "Couldn't check" stays silent on purpose.
+          return hide();
+      }
+    }
     return;
   }
 
@@ -100,18 +121,23 @@ document.addEventListener("DOMContentLoaded", () => {
     fetch("/api/updates/check")
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status))))
       .then((data) => {
-        if (data.status !== "available" && data.status !== "required") return;
+        // "current", "dev", "disabled", "unknown": nothing to announce.
+        if (data.status !== "available" && data.status !== "required") return hide();
         // Manifest-supplied, therefore untrusted - see safeExternalUrl.
         linkEl.href =
           safeExternalUrl(data.downloadPageUrl) || safeExternalUrl(data.downloadUrl) || "#";
-        // A release flagged as required is not something to hide behind a
-        // dismissal - the running version is known-bad.
-        show(data.latestVersion, `You're on ${data.currentVersion}.`, {
+        show({
+          version: data.latestVersion,
+          title: `Version ${data.latestVersion} is available`,
+          detail: `You're on ${data.currentVersion}.`,
+          // A release flagged as required is not something to hide behind a
+          // dismissal - the running version is known-bad.
           dismissible: data.status !== "required",
         });
       })
       .catch(() => {
         /* offline is normal for a local-first app - stay quiet */
+        hide();
       });
   }
 });

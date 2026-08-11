@@ -40,6 +40,21 @@
   box-sizing: border-box;
 }
 
+/* The `hidden` attribute is how every script in static/js/ shows and hides
+   things, so it has to actually win.
+   The browser's own `[hidden] { display: none }` is a *user-agent* rule, and
+   any author rule beats a user-agent rule outright - specificity never even
+   enters into it. So `.update-banner { display: flex }` below silently
+   defeated `<div class="update-banner" hidden>`, and the dashboard showed a
+   permanent "Update available" banner to users who were already up to date.
+   Same for the Settings update buttons and both progress bars.
+   `!important` is deliberate: it must also outrank any future rule that sets
+   `display` on a class that some element happens to combine with `hidden`,
+   regardless of where that rule lands in this file. */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;

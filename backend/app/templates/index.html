@@ -7,7 +7,11 @@
 <div class="update-banner" id="update-banner" hidden>
   <span class="update-banner__icon">⬆</span>
   <div class="update-banner__text">
-    <strong id="update-banner-title">Update available</strong>
+    {# Intentionally empty. status.js fills both of these in before it
+       unhides the banner, and hard-coding "Update available" here meant
+       that any failure to keep the banner hidden rendered as a specific
+       false claim rather than as nothing. #}
+    <strong id="update-banner-title"></strong>
     <span id="update-banner-detail"></span>
   </div>
   <a class="btn btn--small" id="update-banner-link" href="#" target="_blank" rel="noreferrer">Get the update</a>

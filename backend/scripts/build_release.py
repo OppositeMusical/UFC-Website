@@ -74,9 +74,10 @@ ARTIFACT_KINDS: dict[str, tuple[tuple[str, str, str], ...]] = {
     "mac": (("*.dmg", "dmg", "MMA-Assist-{version}-macos.dmg"),),
 }
 
-# electron-updater reads this from the *release host*, not the website. It
-# is copied alongside the installers only so the upload step is one folder.
-UPDATE_METADATA_GLOBS = ("latest.yml", "*.blockmap")
+# electron-updater reads these from the *release host*, not the website.
+# They are copied alongside the installers only so the upload step is one
+# folder. Resolved by exact name against the release being published - see
+# the blockmap handling in main().
 
 
 def find_artifacts(version: str | None, platform: str = "win") -> tuple[list[tuple[Path, str, str]], str]:
@@ -243,10 +244,18 @@ def main() -> None:
         # Only this platform's stale artifacts. Clearing everything would
         # delete the other platform's published file, which is built on a
         # different machine and cannot be regenerated here.
-        stale_glob = "*-mac*" if args.platform == "mac" else "*-win*"
-        for stale in DOWNLOADS_DIR.glob(stale_glob):
-            print(f"Removing old {stale.name}")
-            stale.unlink()
+        #
+        # Derived from the published-name templates rather than hand-written,
+        # because a hand-written "*-win*" silently missed every NSIS artifact:
+        # the installer is published as MMA-Assist-<v>-setup-x64.exe, which
+        # has no "-win" in it. Old installers and their blockmaps therefore
+        # accumulated here across releases and turned up in the upload list
+        # below, inviting a previous version's blockmap to be attached to
+        # this version's release. The trailing * catches .blockmap.
+        for _, _, template in ARTIFACT_KINDS[args.platform]:
+            for stale in DOWNLOADS_DIR.glob(template.format(version="*") + "*"):
+                print(f"Removing old {stale.name}")
+                stale.unlink()
 
     def url_for(asset_name: str) -> tuple[str, str]:
         if args.github_release:
@@ -296,18 +305,35 @@ def main() -> None:
     # never notices the release exists.
     update_metadata: list[str] = []
     if args.platform == "win":
-        for pattern in UPDATE_METADATA_GLOBS:
-            for meta in RELEASE_DIR.glob(pattern):
-                # Spaces -> hyphens, for the same reason the installer is
-                # renamed: electron-updater fetches the blockmap by appending
-                # ".blockmap" to the installer's URL, so "MMA Assist-...exe
-                # .blockmap" is a 404 against a hyphenated installer name.
-                # That one degrades quietly - the update still works, it just
-                # downloads all 178MB instead of the changed blocks, silently
-                # discarding the reason NSIS was chosen over the zip.
-                published = meta.name.replace(" ", "-")
-                shutil.copyfile(meta, DOWNLOADS_DIR / published)
-                update_metadata.append(published)
+        # Blockmaps are taken from THIS release's installer by name, not by a
+        # "*.blockmap" glob. desktop/release/ is never cleaned between builds,
+        # so a glob accumulated one blockmap per version ever built and the
+        # upload list below grew every release - inviting a stale version's
+        # blockmap onto the new release, where it means nothing and hides the
+        # one that matters.
+        wanted: list[tuple[Path, str]] = [(RELEASE_DIR / "latest.yml", "latest.yml")]
+        for source, kind, published_name in artifacts:
+            if kind == "nsis":
+                wanted.append(
+                    (
+                        source.with_name(source.name + ".blockmap"),
+                        # Spaces -> hyphens, for the same reason the installer
+                        # is renamed: electron-updater fetches the blockmap by
+                        # appending ".blockmap" to the installer's URL, so
+                        # "MMA Assist-...exe.blockmap" is a 404 against a
+                        # hyphenated installer name. That one degrades quietly
+                        # - the update still works, it just downloads all
+                        # 178MB instead of the changed blocks, silently
+                        # discarding the reason NSIS was chosen over the zip.
+                        published_name + ".blockmap",
+                    )
+                )
+
+        for meta, published in wanted:
+            if not meta.exists():
+                continue
+            shutil.copyfile(meta, DOWNLOADS_DIR / published)
+            update_metadata.append(published)
 
     # The primary artifact (first in ARTIFACT_KINDS) is what the platform
     # entry and the legacy top-level fields describe.

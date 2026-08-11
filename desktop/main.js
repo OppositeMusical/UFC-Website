@@ -1,8 +1,10 @@
 "use strict";
 
-const { app, BrowserWindow, Menu, shell, dialog } = require("electron");
+const { app, BrowserWindow, Menu, shell, dialog, ipcMain } = require("electron");
 const path = require("node:path");
 const { startBackend, stopBackend } = require("./backend");
+const { maybeOfferImport } = require("./datamigrate");
+const updater = require("./updater");
 
 const startupLog = [];
 function log(line) {
@@ -15,6 +17,34 @@ let mainWindow = null;
 let splashWindow = null;
 let backendUrl = null;
 let quitting = false;
+
+/**
+ * Schemes we are willing to hand to the OS.
+ *
+ * shell.openExternal delegates to the platform's protocol handler, which
+ * will act on far more than web URLs - file:, smb:, and the various
+ * ms-*: handlers among them. The renderer displays model-generated text,
+ * so "a link in a chat reply" is attacker-influenced input in the threat
+ * model; without this an emitted `file:///...` or `ms-msdt:...` link
+ * became a click-to-launch primitive. Everything below funnels through
+ * openExternalSafely rather than calling shell.openExternal directly.
+ */
+const EXTERNAL_SCHEMES = new Set(["http:", "https:", "mailto:"]);
+
+function openExternalSafely(target) {
+  let parsed;
+  try {
+    parsed = new URL(target);
+  } catch {
+    log(`blocked external navigation to an unparseable URL: ${String(target).slice(0, 120)}`);
+    return;
+  }
+  if (!EXTERNAL_SCHEMES.has(parsed.protocol)) {
+    log(`blocked external navigation to disallowed scheme: ${parsed.protocol}`);
+    return;
+  }
+  shell.openExternal(parsed.toString());
+}
 
 /**
  * A second launch would spawn a second backend against the same SQLite
@@ -94,7 +124,7 @@ function createMainWindow(url) {
 
   mainWindow.webContents.setWindowOpenHandler(({ url: target }) => {
     if (!isInternal(target)) {
-      shell.openExternal(target);
+      openExternalSafely(target);
       return { action: "deny" };
     }
     return { action: "allow" };
@@ -103,8 +133,22 @@ function createMainWindow(url) {
   mainWindow.webContents.on("will-navigate", (event, target) => {
     if (!isInternal(target)) {
       event.preventDefault();
-      shell.openExternal(target);
+      openExternalSafely(target);
     }
+  });
+
+  // The renderer needs none of these, and the page it runs is the only
+  // thing that could ask - deny by default rather than leaving the
+  // decision to Electron's permissive default.
+  mainWindow.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) => {
+    callback(false);
+  });
+
+  // Nothing in the UI embeds a <webview>; one appearing means the page was
+  // compromised, and attaching it would hand over a fresh renderer whose
+  // webPreferences are not the ones configured above.
+  mainWindow.webContents.on("will-attach-webview", (event) => {
+    event.preventDefault();
   });
 
   mainWindow.on("closed", () => {
@@ -119,7 +163,7 @@ function buildMenu() {
       submenu: [
         {
           label: "Open in Browser",
-          click: () => backendUrl && shell.openExternal(backendUrl),
+          click: () => backendUrl && openExternalSafely(backendUrl),
         },
         { type: "separator" },
         { role: "quit" },
@@ -159,9 +203,34 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+/**
+ * Update IPC. Every handler is argument-free by design - see preload.js.
+ *
+ * Registered once, before any window exists, so a renderer that loads fast
+ * cannot invoke a channel that has no handler yet.
+ */
+function registerUpdateIpc() {
+  updater.init({
+    onLog: log,
+    onState: (state) => {
+      // Guard against a state change arriving while the window is being
+      // torn down (the install path quits the app mid-flight).
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("updates:state", state);
+      }
+    },
+  });
+
+  ipcMain.handle("updates:state", () => updater.getState());
+  ipcMain.handle("updates:check", () => updater.check());
+  ipcMain.handle("updates:download", () => updater.download());
+  ipcMain.handle("updates:install", () => updater.install());
+}
+
 async function boot() {
   createSplash();
   buildMenu();
+  registerUpdateIpc();
 
   try {
     const { url } = await startBackend({
@@ -175,6 +244,9 @@ async function boot() {
       // than beside the app - Electron resolves that path for us.
       userDataDir: app.getPath("userData"),
       onLog: log,
+      // Offers to bring data across when a portable user switches to the
+      // installed build. No-op in every other case.
+      beforeStart: ({ dataDir, dataSource }) => maybeOfferImport({ dataDir, dataSource, log }),
     });
     backendUrl = url;
     createMainWindow(url);

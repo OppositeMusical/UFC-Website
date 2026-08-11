@@ -1,3 +1,23 @@
+/**
+ * Returns `value` only if it is an http(s) URL, otherwise null.
+ *
+ * Use this for any URL that came from off-machine before putting it in an
+ * href. The update manifest is fetched from a remote host, so its
+ * downloadUrl/downloadPageUrl fields are untrusted: assigning one directly
+ * to .href would let a "javascript:..." value execute in the app's own
+ * origin as soon as the user clicked the button, with access to everything
+ * same-origin - including the settings endpoints.
+ */
+function safeExternalUrl(value) {
+  if (!value) return null;
+  try {
+    const parsed = new URL(value, window.location.href);
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.href : null;
+  } catch {
+    return null;
+  }
+}
+
 // Sidebar collapse. The initial class is applied by an inline script in
 // base.html <head> to avoid a flash; this only handles toggling + persisting.
 document.addEventListener("DOMContentLoaded", () => {

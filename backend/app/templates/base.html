@@ -6,7 +6,7 @@
   <title>{% block title %}MMA Assist{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}" />
   {% block extra_css %}{% endblock %}
-  <script>
+  <script nonce="{{ csp_nonce }}">
     // Applied before first paint so a collapsed sidebar never flashes open
     // on navigation. The class lands on <html>, which exists at this point;
     // <body> does not yet.

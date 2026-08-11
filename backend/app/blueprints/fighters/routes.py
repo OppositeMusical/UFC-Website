@@ -16,10 +16,20 @@ def autocomplete():
         return jsonify([])
     session = Session()
     try:
-        like = f"%{query}%"
+        # Escape LIKE's own wildcards before wrapping the term. Unescaped, a
+        # query of "%" or "_" is a pattern rather than a search: "%" matches
+        # the entire 6,700-row table on both columns for every keystroke,
+        # and "a_b" silently matches things the user did not type.
+        escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        like = f"%{escaped}%"
         rows = (
             session.query(Fighter)
-            .filter(or_(Fighter.name.ilike(like), Fighter.nickname.ilike(like)))
+            .filter(
+                or_(
+                    Fighter.name.ilike(like, escape="\\"),
+                    Fighter.nickname.ilike(like, escape="\\"),
+                )
+            )
             .order_by(Fighter.name)
             .limit(15)
             .all()

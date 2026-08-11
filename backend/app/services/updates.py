@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from urllib.parse import urlsplit
 
 import requests
 
@@ -29,6 +30,25 @@ REQUEST_TIMEOUT_SECONDS = 6
 
 _cache: dict | None = None
 _cache_at: float = 0.0
+
+
+def _safe_http_url(value: object) -> str | None:
+    """Passes through http(s) URLs only, else None.
+
+    The manifest is fetched from a remote host, so its URL fields are
+    untrusted input. The UI puts them in an href, where a "javascript:"
+    value would execute in the app's own origin. The page guards this too
+    (safeExternalUrl in common.js); doing it here as well means a manifest
+    that has been tampered with never reaches the browser in the first
+    place, rather than relying on one layer holding.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        scheme = urlsplit(value.strip()).scheme.lower()
+    except ValueError:
+        return None
+    return value.strip() if scheme in ("http", "https") else None
 
 
 def check_for_update(force: bool = False) -> dict:
@@ -74,15 +94,25 @@ def check_for_update(force: bool = False) -> dict:
     if not is_newer(latest, current):
         return {"status": "current", "currentVersion": current, "latestVersion": latest}
 
+    # Kill switch. `minSupportedVersion` lets a release that turned out to be
+    # broken be marked as one users should not stay on - the prompt stops
+    # being dismissable rather than nagging politely forever. Absent or
+    # malformed, is_newer returns False, so the default is always the
+    # ordinary optional-update path.
+    required = is_newer(str(manifest.get("minSupportedVersion") or "").strip(), current)
+
     return {
-        "status": "available",
+        "status": "required" if required else "available",
         "currentVersion": current,
         "latestVersion": latest,
+        "detail": (
+            "This version has a known problem and should be replaced." if required else None
+        ),
         # Point at the site's download page rather than the raw installer:
         # the page carries the SmartScreen warning and the checksum, and a
         # binary that starts downloading unprompted is hostile.
         "downloadPageUrl": Config.DOWNLOAD_PAGE_URL,
-        "downloadUrl": manifest.get("downloadUrl"),
+        "downloadUrl": _safe_http_url(manifest.get("downloadUrl")),
         "releaseNotes": manifest.get("releaseNotes") or [],
         "releasedAt": manifest.get("releasedAt"),
         "sizeBytes": manifest.get("sizeBytes"),

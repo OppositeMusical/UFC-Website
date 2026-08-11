@@ -135,6 +135,45 @@ def test_force_bypasses_the_cache():
     assert updates.check_for_update(force=True)["latestVersion"] == "1.4.0"
 
 
+# --- minSupportedVersion kill switch ------------------------------------
+
+
+@responses.activate
+def test_update_is_required_when_below_min_supported():
+    # Current is 1.2.0 (see the _isolate fixture).
+    _manifest("1.3.0", minSupportedVersion="1.2.5")
+    result = updates.check_for_update()
+    assert result["status"] == "required"
+    assert result["detail"]
+
+
+@responses.activate
+def test_update_stays_optional_at_or_above_min_supported():
+    _manifest("1.3.0", minSupportedVersion="1.2.0")
+    assert updates.check_for_update()["status"] == "available"
+
+
+@responses.activate
+def test_absent_min_supported_is_an_optional_update():
+    _manifest("1.3.0")
+    assert updates.check_for_update()["status"] == "available"
+
+
+@responses.activate
+def test_malformed_min_supported_does_not_force_an_update():
+    """A typo in the manifest must not escalate every user to a forced
+    update - unparseable input fails towards the ordinary path."""
+    _manifest("1.3.0", minSupportedVersion="not-a-version")
+    assert updates.check_for_update()["status"] == "available"
+
+
+@responses.activate
+def test_min_supported_does_not_invent_an_update_when_current():
+    # Nothing newer exists, so there is nothing to require regardless.
+    _manifest("1.2.0", minSupportedVersion="9.9.9")
+    assert updates.check_for_update()["status"] == "current"
+
+
 # --- endpoint -----------------------------------------------------------
 
 

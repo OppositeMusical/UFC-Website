@@ -366,6 +366,51 @@ vectors).
 - No telemetry, no external data collection beyond the user's own configured AI provider calls and the user-initiated `ufc.com` scrape.
 - All app data (SQLite DB, Chroma persistent directory, Fernet fallback key file) lives under `%LOCALAPPDATA%\UFCPredictor\`, never inside the installed program directory (which may be read-only).
 
+### 11.1 Loopback server hardening (`app/security.py`)
+
+Binding `127.0.0.1` keeps the port off the network but is **not** an access
+control: the user's browser can reach it, and so can any page the user
+visits. Three guards run as `before_request`/`after_request` hooks, verified
+by `backend/tests/test_security.py` (each test fails if the hooks are
+removed).
+
+| Guard | Attack it closes |
+|---|---|
+| **Host allowlist** — only `127.0.0.1`, `localhost`, `::1` | **DNS rebinding.** An attacker points `evil.com` at `127.0.0.1` after first load; the browser then treats our responses as `evil.com`'s origin, so the same-origin policy is *satisfied* and CORS never applies. Chat history, saved predictions, and provider settings were all readable. A rebound request cannot claim a loopback Host without giving up the origin it wants to read from. |
+| **Origin / `Sec-Fetch-Site` check** on unsafe methods | **CSRF.** A cross-origin form POST is a "simple request": no preflight, no CORS opt-in needed to *send* it. JSON endpoints shrugged these off only incidentally (`get_json()` insists on `application/json`, which does force a preflight), but `POST /chat/new` and `POST /settings/sync-fighters` take no body at all and were fully exposed — the latter starts a multi-hour scrape of ufc.com **from the user's own IP**. |
+| **Response headers** — CSP, `nosniff`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` | Defence in depth for the chat page, which renders LLM output. |
+
+The Host and origin checks reinforce each other and neither is redundant: a
+rebound request looks same-origin to the browser, so only the Host check
+stops it passing the origin test as well.
+
+`UFC_PREDICTOR_ALLOWED_HOSTS` (comma-separated) extends the allowlist for a
+deliberate `--host 0.0.0.0` run. Off by default — exposing this app to a
+network should have to be typed out.
+
+**CSP shape:** `script-src` is strict (`'self'` plus a per-response nonce for
+the one pre-paint inline block in `base.html`). `style-src` keeps
+`'unsafe-inline'` because several templates carry `style=""` attributes and
+CSP has no nonce mechanism for those; that is the deliberately weaker half,
+since style injection cannot execute code.
+
+### 11.2 Untrusted input boundaries
+
+- **The update manifest is remote data, not configuration.** Its
+  `downloadUrl`/`downloadPageUrl` reach an `href`, where a `javascript:`
+  value would execute in the app's own origin with access to every
+  same-origin endpoint. Filtered to http(s) in **both** `services/updates.py`
+  (`_safe_http_url`) and `static/js/common.js` (`safeExternalUrl`).
+- **`shell.openExternal` is a launch primitive**, not a link opener — it
+  delegates to the OS protocol handler, which acts on `file:`, `smb:` and the
+  `ms-*:` family. Since the renderer displays model-generated text, `desktop/main.js`
+  funnels every call through `openExternalSafely`, which allows only
+  http/https/mailto.
+- **LIKE wildcards in fighter autocomplete are escaped.** Unescaped, `%`
+  matched all ~6,700 rows on both indexed columns on every keystroke.
+- Templates rely on Jinja2 autoescaping (no `|safe`, no `Markup`), and the
+  static JS writes message content with `textContent`, never `innerHTML`.
+
 ## 12. Folder Structure
 
 ```
@@ -453,21 +498,57 @@ input** — skipping a step ships a mismatched build rather than failing:
 > instead of the port Electron assigned, and the app died on a health-check
 > timeout while a perfectly healthy server sat on the wrong port.
 
-### 13.1 Portable, not installed
+### 13.1 Two Windows artifacts: installer and portable
 
-The app ships as a zip the user extracts wherever they like — nothing in
-Program Files, nothing in AppData. `desktop/backend.js::resolveDataDir()`
-resolves the data location per launch: an existing `UFC_PREDICTOR_DATA_DIR`
-wins (tests/dev), else `<folder containing the exe>/data` when packaged,
-else `%LOCALAPPDATA%` when that folder isn't writable. Because it is derived
-from `process.execPath` every time and never persisted, moving the folder to
-another drive or a USB stick keeps working. Electron passes the result down
-as an env var, so the Python side stays generic.
+From **v0.5.0** Windows ships both, from one `npm run dist`:
 
-The Download page uses `showDirectoryPicker()` where available (Chromium
-only, secure context only) to stream the zip straight into a chosen folder;
-Firefox and Safari fall back to an ordinary download link, and any failure —
-CORS on a cross-origin release asset being the likely one — falls back too.
+| Artifact | Data location | In-app update |
+|---|---|---|
+| `MMA-Assist-<v>-setup-win64.exe` (NSIS, **primary**) | user profile | **Yes** — see 13.2 |
+| `MMA-Assist-<v>-portable-win64.zip` | `data/` beside the exe | No — download and replace |
+
+The installer is primary because **electron-updater only supports NSIS on
+Windows**; `zip` and `portable` are not auto-updatable targets. Keeping the
+zip costs one line of build config and preserves the no-install path for
+anyone who wants it.
+
+`desktop/backend.js::resolveDataDir()` resolves the location per launch, in
+this order:
+
+1. An existing `UFC_PREDICTOR_DATA_DIR` (tests/dev).
+2. macOS packaged → `~/Library/Application Support`.
+3. **An existing `data/` folder beside the exe → use it.** Checked *before*
+   the installed-build test, deliberately. This is the compatibility
+   guarantee for everyone already on the portable build: no future change to
+   how "installed" is detected can quietly point them at an empty directory,
+   which would re-seed and look exactly like data loss.
+4. An installed build (uninstaller present beside the exe) → user profile.
+   Nothing may live in the install directory, because the updater replaces
+   it wholesale.
+5. Otherwise → create `data/` beside the exe; `%LOCALAPPDATA%` if unwritable.
+
+There is no flag from electron-builder distinguishing the two targets — both
+package the identical `win-unpacked` tree — hence the uninstaller check.
+
+Because the portable path is derived from `process.execPath` every time and
+never persisted, moving that folder to another drive or a USB stick keeps
+working. Electron passes the result down as an env var, so the Python side
+stays generic.
+
+**Switching portable → installed** would otherwise strand the user's data in
+the old folder. `desktop/datamigrate.js` runs on the first launch of an
+installed build that finds an empty data directory and *offers* a one-time
+import (they pick the old folder; it copies the database, Chroma directory
+and secret files). Never silent, never guessed.
+
+On the Download page the installer is a plain link; the portable zip sits
+behind a disclosure and keeps the `showDirectoryPicker()` flow where
+available (Chromium only, secure context only) to stream straight into a
+chosen folder. Firefox and Safari fall back to an ordinary download link,
+and any failure — CORS on a cross-origin release asset being the likely one
+— falls back too. `DownloadButton.tsx` renders both the 0.5.0 manifest shape
+(installer at the root, zip under `platforms.winPortable`) and the older one
+(zip at the root), because a cached deploy can serve either.
 
 Electron's single-instance lock is app-wide rather than per-data-directory,
 so two portable copies cannot run simultaneously even though their databases
@@ -479,7 +560,7 @@ reputation is keyed to a publicly-trusted certificate with download history,
 so public downloads still show "Windows protected your PC". The Download page
 says so and publishes the SHA-256 to verify against.
 
-**Versioning and in-app update checks.** `desktop/package.json`'s `version`
+**Versioning.** `desktop/package.json`'s `version`
 is the single source of truth — electron-builder stamps the installer from
 it, `desktop/main.js` passes it to the backend as `--app-version`, and
 `build_release.py` reads it back off the installer filename. The Python
@@ -487,19 +568,72 @@ side deliberately declares no version constant (`app/version.py` holds only
 comparison logic and the value Electron supplied), so the two cannot drift.
 `scripts/set_version.py` bumps it.
 
-Installed copies poll `Config.UPDATE_MANIFEST_URL` — the same `version.json`
-the Download page reads — at most every 6 hours, cached in-process, and
-surface a dismissible dashboard banner plus a Settings panel when a newer
-release exists. Publishing the manifest is the only step that announces a
-release; there is no separate update feed to maintain.
+### 13.2 In-app updates (v0.5.0+)
 
-The app **never self-updates**: it links to the download page and the user
-runs the installer. Silently replacing an executable is a larger trust ask
-than this app needs to make, and the download page is where the SmartScreen
-warning and checksum live. Comparison is numeric, not lexical (`0.10.0` >
-`0.9.0`), a prerelease sorts below its own release, and an unparseable or
-older published version never prompts — a bad manifest must not be able to
-push users into a "downgrade update".
+The installed build updates itself: **Settings → Check for Updates →
+Download → Restart & Install**. `desktop/updater.js` wraps
+`electron-updater`; `desktop/main.js` exposes it over IPC.
+
+**Two feeds, deliberately not merged.**
+
+| Feed | Read by | Purpose |
+|---|---|---|
+| `latest.yml` on the GitHub release | the installed app, via electron-updater | what actually drives the update |
+| `version.json` on the website | the Download page, browsers, the portable build | announcement + manual download |
+
+Inside the desktop app the updater is authoritative, because it is the thing
+that will perform the install. Driving the dashboard banner off the website
+manifest *as well* would let the two disagree — a release exists but
+`version.json` has not caught up — and show a prompt the Settings page then
+contradicts. Both `status.js` and `settings.js` feature-detect
+`window.mmaAssist.updates` and fall back to the Flask endpoint in a plain
+browser or a portable build.
+
+**Forgetting to upload `latest.yml` is a silent failure**: the app simply
+keeps reporting it is current. `build_release.py` copies it next to the
+installers and prints a reminder, and warns loudly if the nsis target did
+not produce one.
+
+**Differential downloads.** The `.blockmap` (`nsis.differentialPackage`)
+means an update transfers only changed blocks. This matters more than it
+sounds: of ~630MB uncompressed, `resources/backend` is 294MB and the
+Electron runtime is ~300MB, while a typical release changes ~100KB of JS and
+Python. Without blockmaps every patch release is a quarter-gigabyte download.
+
+**The updater is a remote-code-execution channel by design.** Four controls:
+
+| Vector | Control |
+|---|---|
+| Renderer compromise (the chat page renders LLM output) | Every IPC method is **argument-free**. The renderer may say "go", never "go *here*". |
+| Tampered manifest redirecting the binary | Feed pinned at build time in `publish`, baked into `app-update.yml`. Never manifest-supplied. |
+| Compromised release asset | `win.verifyUpdateCodeSignature` checks Authenticode against `publish[].publisherName` (`OppositeMusical`). |
+| MITM | HTTPS + sha512 from `latest.yml`. |
+
+⚠️ **Signature verification fails for users who never imported the
+self-signed certificate.** That is correct and must stay — but the raw error
+reads like a corrupt download, which invites exactly the wrong response.
+`updater.js::describeError()` rewrites it to name the certificate and say
+*do not install* if unexpected. A publicly-trusted OV certificate would
+remove both this cliff and the SmartScreen friction; it is the single
+highest-value purchase for this project.
+
+**Install ordering.** Windows will not overwrite a running executable, and
+`resources/backend` is exactly that. `install()` awaits
+`stopBackendAndWait()` before `quitAndInstall()`; the wait resolves rather
+than rejects on timeout, because blocking the update forever beats letting
+the installer report a locked file.
+
+**Kill switch.** `minSupportedVersion` in `version.json` escalates status
+from `available` to `required`, and a required update's banner is not
+dismissable. Absent or malformed values fall back to the ordinary optional
+path — a manifest typo must not force-update everyone.
+
+Comparison is numeric, not lexical (`0.10.0` > `0.9.0`), a prerelease sorts
+below its own release, and an unparseable or older published version never
+prompts — a bad manifest must not push users into a "downgrade update".
+
+**Rollback** is manual: keep older releases downloadable. Retaining a
+~600MB previous copy on disk is not worth it for a single-user tool.
 
 **Marketing site:**
 ```

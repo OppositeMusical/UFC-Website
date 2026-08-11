@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import App from "../src/App";
 
@@ -101,6 +101,82 @@ describe("scroll reveal", () => {
     const reveals = container.querySelectorAll(".reveal");
     expect(reveals.length).toBeGreaterThan(0);
     reveals.forEach((el) => expect(el).toHaveClass("is-visible"));
+  });
+});
+
+describe("DownloadButton - installer manifest (0.5.0+)", () => {
+  const INSTALLER_MANIFEST = {
+    version: "0.5.0",
+    downloadUrl: "/downloads/MMA-Assist-0.5.0-setup-win64.exe",
+    fileName: "MMA-Assist-0.5.0-setup-win64.exe",
+    kind: "nsis",
+    sizeBytes: 251658240,
+    sha256: "a".repeat(64),
+    platforms: {
+      win: {
+        downloadUrl: "/downloads/MMA-Assist-0.5.0-setup-win64.exe",
+        kind: "nsis",
+        sizeBytes: 251658240,
+      },
+      winPortable: {
+        downloadUrl: "/downloads/MMA-Assist-0.5.0-portable-win64.zip",
+        fileName: "MMA-Assist-0.5.0-portable-win64.zip",
+        kind: "portable",
+        sizeBytes: 243864618,
+      },
+    },
+  };
+
+  function renderDownload() {
+    return render(
+      <MemoryRouter initialEntries={["/download"]}>
+        <App />
+      </MemoryRouter>
+    );
+  }
+
+  it("offers the installer as the primary download", async () => {
+    mockVersionJson(INSTALLER_MANIFEST);
+    renderDownload();
+
+    const link = await screen.findByRole("link", { name: /Download for Windows/i });
+    expect(link).toHaveAttribute("href", "/downloads/MMA-Assist-0.5.0-setup-win64.exe");
+    expect(link).toHaveAttribute("download");
+  });
+
+  it("tells the user the installer self-updates", async () => {
+    // The reason the installer is primary at all - if the page doesn't say
+    // so, the portable build looks like the simpler choice and people end
+    // up on the channel that cannot update itself.
+    mockVersionJson(INSTALLER_MANIFEST);
+    renderDownload();
+    await screen.findByRole("link", { name: /Download for Windows/i });
+    expect(screen.getByText(/Updates itself/i)).toBeInTheDocument();
+  });
+
+  it("keeps the portable zip available behind a disclosure", async () => {
+    mockVersionJson(INSTALLER_MANIFEST);
+    const { container } = renderDownload();
+    await screen.findByRole("link", { name: /Download for Windows/i });
+
+    const toggle = screen.getByRole("button", { name: /portable/i });
+    expect(container.querySelector(".portable-option__body")).toBeNull();
+
+    fireEvent.click(toggle);
+
+    // jsdom has no showDirectoryPicker, so the zip renders as a plain link -
+    // the same fallback Firefox and Safari users get.
+    const zip = await screen.findByRole("link", { name: /Download portable zip/i });
+    expect(zip).toHaveAttribute("href", "/downloads/MMA-Assist-0.5.0-portable-win64.zip");
+  });
+
+  it("still renders when no portable entry is published", async () => {
+    const { platforms, ...installerOnly } = INSTALLER_MANIFEST;
+    mockVersionJson({ ...installerOnly, platforms: { win: platforms.win } });
+    renderDownload();
+
+    await screen.findByRole("link", { name: /Download for Windows/i });
+    expect(screen.queryByRole("button", { name: /portable/i })).not.toBeInTheDocument();
   });
 });
 

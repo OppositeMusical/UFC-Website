@@ -657,6 +657,41 @@ a {
   color: var(--text-muted);
 }
 
+/* Portable download, tucked behind a disclosure. The installer is the
+   recommended path now that it self-updates, so the zip should be findable
+   without competing with it for attention. */
+.portable-option {
+  margin-top: 1.4rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+}
+
+.link-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color var(--dur-fast, 150ms) ease;
+}
+
+.link-button:hover {
+  color: var(--text-primary);
+}
+
+.portable-option__body {
+  margin-top: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.7rem;
+  animation: fade-in var(--dur-mid, 260ms) ease-out;
+}
+
 /* Release notes - left-aligned inside the otherwise centred download card,
    because a bulleted list centred on the page is unreadable. */
 .whats-new {

@@ -62,7 +62,18 @@ function cacheControlFor(pathname) {
 
 function resolveSafe(pathname) {
   // Normalise before joining so "..%2f" style traversal can't escape dist/.
-  const decoded = decodeURIComponent(pathname.split("?")[0]);
+  //
+  // decodeURIComponent throws URIError on a malformed escape sequence - a
+  // bare "/%zz" is enough. This runs inside the request handler, where an
+  // uncaught throw ends the *process*, so before this guard existed a
+  // single unauthenticated GET could take the whole site down and burn a
+  // Railway restart. An undecodable path is just a miss.
+  let decoded;
+  try {
+    decoded = decodeURIComponent(pathname.split("?")[0]);
+  } catch {
+    return null;
+  }
   const target = path.join(DIST, path.normalize(decoded));
   if (!target.startsWith(DIST)) return null;
   return target;
@@ -81,13 +92,22 @@ function sendFile(res, filePath, pathname, statusCode = 200) {
   fs.createReadStream(filePath).pipe(res);
 }
 
-const server = http.createServer((req, res) => {
+function handleRequest(req, res) {
   if (req.method !== "GET" && req.method !== "HEAD") {
     res.writeHead(405, { Allow: "GET, HEAD" }).end("Method Not Allowed");
     return;
   }
 
-  const pathname = new URL(req.url, `http://${req.headers.host}`).pathname;
+  // A client controls both the request target and the Host header, and the
+  // WHATWG parser rejects malformed values in either by throwing.
+  let pathname;
+  try {
+    pathname = new URL(req.url, `http://${req.headers.host || "localhost"}`).pathname;
+  } catch {
+    res.writeHead(400, { "Content-Type": "text/plain" }).end("Bad Request");
+    return;
+  }
+
   const target = resolveSafe(pathname);
 
   if (!target) {
@@ -124,6 +144,26 @@ const server = http.createServer((req, res) => {
     console.error(`error serving ${pathname}:`, err.message);
     res.writeHead(500, { "Content-Type": "text/plain" }).end("Internal Server Error");
   }
+}
+
+// Backstop. Node treats a throw inside the request listener as an uncaught
+// exception and exits, so any future unguarded path in handleRequest would
+// again turn one bad request into an outage. Answer 500 and stay up - this
+// server is stateless, so there is no corrupt state to bail out of.
+const server = http.createServer((req, res) => {
+  try {
+    handleRequest(req, res);
+  } catch (err) {
+    console.error(`unhandled error for ${req.url}:`, err.message);
+    if (!res.headersSent) res.writeHead(500, { "Content-Type": "text/plain" });
+    res.end("Internal Server Error");
+  }
+});
+
+// Malformed request lines/headers are rejected by the parser before the
+// listener runs; without this the error surfaces as an unhandled 'clientError'.
+server.on("clientError", (err, socket) => {
+  if (socket.writable) socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
 });
 
 if (!fs.existsSync(DIST)) {

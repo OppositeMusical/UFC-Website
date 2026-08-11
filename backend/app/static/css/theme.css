@@ -479,6 +479,16 @@ a:hover {
   animation: fade-in var(--dur-mid) var(--ease-out);
 }
 
+/* Secondary line under the update controls: what will happen on install, or
+   what to do about a failure. Indented and rules-off so it reads as guidance
+   attached to the action rather than as status in its own right. */
+.update-hint {
+  max-width: 52ch;
+  line-height: 1.5;
+  border-left: 2px solid var(--border);
+  padding-left: 0.7rem;
+}
+
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }

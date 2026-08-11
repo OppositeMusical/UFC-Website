@@ -119,21 +119,127 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ---- Updates -------------------------------------------------------
+  //
+  // Two paths behind one card:
+  //
+  //   Desktop (NSIS build)  - window.mmaAssist.updates exists. The main
+  //     process downloads and installs; this only renders state it is told
+  //     about. Nothing here chooses a URL - see desktop/preload.js.
+  //   Browser / portable    - falls back to the Flask endpoint and a link
+  //     to the download page, which is exactly the pre-0.5.0 behaviour.
+  //
   const checkBtn = document.getElementById("check-updates-btn");
   const updateStatus = document.getElementById("update-status");
   const notesEl = document.getElementById("release-notes");
   const downloadBtn = document.getElementById("update-download-btn");
+  const fetchBtn = document.getElementById("update-fetch-btn");
+  const installBtn = document.getElementById("update-install-btn");
+  const hintEl = document.getElementById("update-hint");
+  const progressEl = document.getElementById("update-progress");
+  const progressFill = document.getElementById("update-progress-fill");
+  const progressPct = document.getElementById("update-progress-pct");
 
-  async function checkUpdates(force) {
+  const desktopUpdates = window.mmaAssist && window.mmaAssist.updates;
+
+  function resetUpdateUi() {
     notesEl.hidden = true;
     notesEl.innerHTML = "";
     downloadBtn.hidden = true;
-    updateStatus.textContent = force ? "Checking..." : "Checking...";
-    checkBtn.disabled = true;
+    fetchBtn.hidden = true;
+    installBtn.hidden = true;
+    hintEl.hidden = true;
+    hintEl.textContent = "";
+    progressEl.hidden = true;
+  }
 
+  function renderNotes(notes) {
+    if (!notes || !notes.length) return;
+    notes.forEach((note) => {
+      const li = document.createElement("li");
+      li.textContent = note;
+      notesEl.appendChild(li);
+    });
+    notesEl.hidden = false;
+  }
+
+  function formatMb(bytes) {
+    return bytes ? `${(bytes / (1024 * 1024)).toFixed(0)} MB` : null;
+  }
+
+  // ---- Desktop path --------------------------------------------------
+
+  function renderDesktopState(state) {
+    resetUpdateUi();
+    checkBtn.disabled = state.status === "checking" || state.status === "downloading";
+
+    switch (state.status) {
+      case "checking":
+        updateStatus.textContent = "Checking for updates...";
+        break;
+
+      case "available": {
+        const size = formatMb(state.sizeBytes);
+        updateStatus.textContent =
+          `Version ${state.version} is available.` + (size ? ` Download is ${size}.` : "");
+        renderNotes(state.releaseNotes);
+        fetchBtn.hidden = false;
+        break;
+      }
+
+      case "downloading":
+        updateStatus.textContent = `Downloading version ${state.version || ""}...`.trim();
+        progressEl.hidden = false;
+        progressFill.style.width = `${state.percent || 0}%`;
+        progressPct.textContent = `${state.percent || 0}%`;
+        break;
+
+      case "downloaded":
+        updateStatus.textContent = `Version ${state.version} is ready to install.`;
+        progressEl.hidden = false;
+        progressFill.style.width = "100%";
+        progressPct.textContent = "100%";
+        installBtn.hidden = false;
+        hintEl.textContent =
+          "MMA Assist will close, install the update, and reopen. Your fighter database, " +
+          "chats and saved predictions are kept.";
+        hintEl.hidden = false;
+        break;
+
+      case "installing":
+        updateStatus.textContent = "Installing... the app will restart on its own.";
+        break;
+
+      case "not-available":
+        updateStatus.textContent = "You're on the latest version.";
+        break;
+
+      case "unsupported":
+        // Portable build or a dev run: fall back to the manifest check so
+        // the card still tells the user a release exists.
+        checkViaServer(false);
+        return;
+
+      case "error":
+        updateStatus.textContent = state.message || "The update failed.";
+        if (state.hint) {
+          hintEl.textContent = state.hint;
+          hintEl.hidden = false;
+        }
+        break;
+
+      default:
+        updateStatus.textContent = "Ready to check for updates.";
+    }
+  }
+
+  // ---- Browser / portable path ---------------------------------------
+
+  async function checkViaServer(force) {
+    resetUpdateUi();
+    updateStatus.textContent = "Checking...";
+    checkBtn.disabled = true;
     try {
-      const data = await apiFetch(`/api/updates/check${force ? "?force=1" : ""}`);
-      renderUpdateStatus(data);
+      renderServerStatus(await apiFetch(`/api/updates/check${force ? "?force=1" : ""}`));
     } catch (e) {
       updateStatus.textContent = `Could not check for updates: ${e.message}`;
     } finally {
@@ -141,24 +247,25 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function renderUpdateStatus(data) {
-    if (data.status === "available") {
-      updateStatus.textContent = `Version ${data.latestVersion} is available. You're on ${data.currentVersion}.`;
+  function renderServerStatus(data) {
+    resetUpdateUi();
+    if (data.status === "available" || data.status === "required") {
+      updateStatus.textContent =
+        data.status === "required"
+          ? `Version ${data.latestVersion} is required. You're on ${data.currentVersion}.`
+          : `Version ${data.latestVersion} is available. You're on ${data.currentVersion}.`;
       // The download page carries the SmartScreen warning and the
-      // checksum, so send people there rather than starting a 180MB
+      // checksum, so send people there rather than starting a 240MB
       // binary download straight from a settings screen.
-      downloadBtn.href = data.downloadPageUrl || data.downloadUrl || "#";
+      // Manifest-supplied, therefore untrusted - see safeExternalUrl.
+      downloadBtn.href =
+        safeExternalUrl(data.downloadPageUrl) || safeExternalUrl(data.downloadUrl) || "#";
       downloadBtn.hidden = false;
-
-      const notes = data.releaseNotes || [];
-      if (notes.length) {
-        notes.forEach((note) => {
-          const li = document.createElement("li");
-          li.textContent = note;
-          notesEl.appendChild(li);
-        });
-        notesEl.hidden = false;
+      if (data.detail) {
+        hintEl.textContent = data.detail;
+        hintEl.hidden = false;
       }
+      renderNotes(data.releaseNotes);
       return;
     }
 
@@ -171,8 +278,23 @@ document.addEventListener("DOMContentLoaded", () => {
     updateStatus.textContent = messages[data.status] || "Unknown update status.";
   }
 
-  if (checkBtn) {
-    checkBtn.addEventListener("click", () => checkUpdates(true));
-    checkUpdates(false);
+  // ---- Wiring --------------------------------------------------------
+
+  if (checkBtn && desktopUpdates) {
+    desktopUpdates.onState(renderDesktopState);
+    checkBtn.addEventListener("click", () => desktopUpdates.check());
+    fetchBtn.addEventListener("click", () => desktopUpdates.download());
+    installBtn.addEventListener("click", () => {
+      installBtn.disabled = true;
+      updateStatus.textContent = "Closing and installing...";
+      desktopUpdates.install();
+    });
+    // Replay whatever the main process already knows - the check may have
+    // run before this page loaded, or be in progress right now.
+    desktopUpdates.state().then(renderDesktopState);
+    desktopUpdates.check();
+  } else if (checkBtn) {
+    checkBtn.addEventListener("click", () => checkViaServer(true));
+    checkViaServer(false);
   }
 });

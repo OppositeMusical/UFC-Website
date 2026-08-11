@@ -4,6 +4,7 @@ from flask import Flask
 
 from app.config import Config
 from app.extensions import Session, init_engine
+from app.security import init_security
 from app.services.db.session import init_db
 from app.utils.paths import resource_path
 
@@ -15,6 +16,10 @@ def create_app(config_class: type[Config] = Config) -> Flask:
         static_folder=str(resource_path("static")),
     )
     app.config.from_object(config_class)
+
+    # Registered before the blueprints so the Host/origin guards run ahead of
+    # every route, including /health.
+    init_security(app)
 
     if not app.testing:
         # Must run before init_engine()/init_db() ever create the sqlite

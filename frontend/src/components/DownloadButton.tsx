@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 
 export interface PlatformArtifact {
   downloadUrl: string;
-  /** "portable" = Windows zip; "dmg" = macOS disk image. */
+  /**
+   * "nsis" = Windows installer (the self-updating channel);
+   * "portable" = Windows zip; "dmg" = macOS disk image.
+   */
   kind?: string;
   fileName?: string;
   sizeBytes?: number;
@@ -86,9 +89,10 @@ export default function DownloadButton() {
   const [info, setInfo] = useState<VersionInfo | null>(null);
   const [status, setStatus] = useState<Status>("loading");
   const [transfer, setTransfer] = useState<Transfer>({ state: "idle" });
+  const [portableOpen, setPortableOpen] = useState(false);
 
-  async function handlePickFolder() {
-    if (!info) return;
+  async function handlePickFolder(artifact: PlatformArtifact) {
+    if (!artifact) return;
 
     let dir: FileSystemDirectoryHandle;
     try {
@@ -105,17 +109,17 @@ export default function DownloadButton() {
     setTransfer({ state: "saving", percent: 0 });
 
     try {
-      const response = await fetch(info.downloadUrl);
+      const response = await fetch(artifact.downloadUrl);
       if (!response.ok || !response.body) throw new Error(`Download failed (${response.status})`);
 
-      const fileName = info.fileName || "MMA-Assist-portable.zip";
+      const fileName = artifact.fileName || "MMA-Assist-portable.zip";
       const handle = await dir.getFileHandle(fileName, { create: true });
       const writable = await handle.createWritable();
 
       // Streamed chunk by chunk rather than response.blob(): this archive is
       // ~230MB and buffering it in memory before writing risks an OOM on a
       // modest machine, and gives no progress feedback on a slow connection.
-      const total = Number(response.headers.get("content-length")) || info.sizeBytes || 0;
+      const total = Number(response.headers.get("content-length")) || artifact.sizeBytes || 0;
       const reader = response.body.getReader();
       let received = 0;
 
@@ -204,13 +208,131 @@ export default function DownloadButton() {
 
   const size = formatSize(info.sizeBytes);
 
+  // From 0.5.0 the manifest's primary Windows artifact is the NSIS
+  // installer, because it is the only Windows target electron-updater can
+  // update in place. The portable zip moved to platforms.winPortable.
+  //
+  // Older manifests put the portable zip at the root with kind "portable",
+  // and this page is served to whoever loads it - including someone hitting
+  // a cached deploy - so both shapes have to render.
+  const rootIsInstaller = info.kind === "nsis";
+  const portable: PlatformArtifact | null =
+    info.platforms?.winPortable ?? (rootIsInstaller ? null : info);
+
+  if (rootIsInstaller) {
+    return (
+      <div className="download-cta">
+        <a className="btn btn--primary btn--download" href={info.downloadUrl} download>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 3v12" />
+            <path d="M7 12l5 5 5-5" />
+            <path d="M4 21h16" />
+          </svg>
+          Download for Windows
+        </a>
+
+        <p className="download-card__version">
+          Version {info.version}
+          {size ? ` · ${size}` : ""} · Windows 10/11 (64-bit)
+        </p>
+        <p className="download-card__meta">
+          Installer · Fighter database included · <strong>Updates itself</strong> — later
+          releases install from inside the app.
+        </p>
+
+        {info.releaseNotes && info.releaseNotes.length > 0 && (
+          <div className="whats-new">
+            <h3>
+              What's new in {info.version}
+              {info.releasedAt ? <span> · {info.releasedAt}</span> : null}
+            </h3>
+            <ul>
+              {info.releaseNotes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {info.sha256 && (
+          <p className="download-card__hash">
+            <span>SHA-256</span>
+            <code>{info.sha256}</code>
+          </p>
+        )}
+
+        {portable && (
+          <div className="portable-option">
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => setPortableOpen((open) => !open)}
+              aria-expanded={portableOpen}
+            >
+              {portableOpen ? "Hide" : "Prefer not to install? Get the portable version"}
+            </button>
+
+            {portableOpen && (
+              <div className="portable-option__body">
+                <p className="download-card__meta">
+                  A zip you extract anywhere — nothing is installed and the app keeps its data
+                  in a <code>data</code> folder beside the exe. It does{" "}
+                  <strong>not</strong> update itself; you download and replace it by hand.
+                </p>
+                {supportsFolderPicker() ? (
+                  <button
+                    type="button"
+                    className="btn btn--secondary"
+                    onClick={() => handlePickFolder(portable)}
+                    disabled={transfer.state === "saving"}
+                  >
+                    {transfer.state === "saving"
+                      ? `Saving… ${transfer.percent}%`
+                      : "Choose Folder & Download"}
+                  </button>
+                ) : (
+                  <a className="btn btn--secondary" href={portable.downloadUrl} download>
+                    Download portable zip
+                  </a>
+                )}
+                {transfer.state === "saving" && (
+                  <div className="transfer-bar" role="progressbar" aria-valuenow={transfer.percent} aria-valuemin={0} aria-valuemax={100}>
+                    <span className="transfer-bar__fill" style={{ width: `${transfer.percent}%` }} />
+                  </div>
+                )}
+                {transfer.state === "done" && (
+                  <p className="transfer-note transfer-note--ok">
+                    Saved to <strong>{transfer.folder}</strong>. Extract the zip there, then run{" "}
+                    <code>MMA Assist.exe</code>.
+                  </p>
+                )}
+                {transfer.state === "error" && (
+                  <p className="transfer-note transfer-note--err">
+                    {transfer.message}{" "}
+                    <a href={portable.downloadUrl} download>
+                      Download normally instead
+                    </a>
+                    .
+                  </p>
+                )}
+                {portable.sizeBytes && (
+                  <p className="download-card__version">{formatSize(portable.sizeBytes)} zip</p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="download-cta">
       {supportsFolderPicker() ? (
         <button
           type="button"
           className="btn btn--primary btn--download"
-          onClick={handlePickFolder}
+          onClick={() => handlePickFolder(info)}
           disabled={transfer.state === "saving"}
         >
           {transfer.state === "saving" ? (

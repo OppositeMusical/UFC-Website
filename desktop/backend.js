@@ -53,6 +53,25 @@ function getFreePort() {
  * should still get a working app, not a startup failure - the data
  * re-seeds from the bundle, so nothing is lost.
  */
+/**
+ * True when this copy was put here by the NSIS installer rather than
+ * extracted from the portable zip.
+ *
+ * There is no flag from electron-builder that distinguishes them: both
+ * targets package the identical `win-unpacked` tree, so anything inside
+ * resources/ is byte-for-byte the same. What the installer *does* leave
+ * behind is its uninstaller, beside the exe. Matched loosely by pattern so
+ * a change to electron-builder's naming doesn't silently flip every user
+ * to a fresh data directory.
+ */
+function isInstalledBuild(appFolder) {
+  try {
+    return fs.readdirSync(appFolder).some((name) => /^unins.*\.exe$/i.test(name));
+  } catch {
+    return false;
+  }
+}
+
 function resolveDataDir(isPackaged, userDataDir = null) {
   const explicit = process.env.UFC_PREDICTOR_DATA_DIR;
   if (explicit && explicit.trim()) return { dir: explicit, source: "environment" };
@@ -76,6 +95,23 @@ function resolveDataDir(isPackaged, userDataDir = null) {
   // first so both packaging styles land in the same place.
   const appFolder = process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath);
   const candidate = path.join(appFolder, "data");
+
+  // An existing data folder beside the exe always wins, and is checked
+  // before the installed-build test on purpose. This is the compatibility
+  // guarantee for everyone already running the portable build: extracting a
+  // newer zip over the old folder, or any future change to how "installed"
+  // is detected, must never quietly point them at an empty directory and
+  // re-seed. Their chats and predictions would still be on disk, but the
+  // app would look like it had lost them.
+  if (fs.existsSync(candidate)) {
+    return { dir: candidate, source: "portable (existing data folder beside the app)" };
+  }
+
+  // Installed by NSIS: user data belongs in the profile, not in the install
+  // directory, which the updater replaces wholesale on every update.
+  if (isInstalledBuild(appFolder)) {
+    return { dir: userDataDir, source: "installed (user profile)" };
+  }
 
   try {
     fs.mkdirSync(candidate, { recursive: true });
@@ -153,7 +189,14 @@ function pollHealth(port, deadline) {
  * diagnosable - without it a Python traceback vanishes and the user just
  * gets "could not start".
  */
-async function startBackend({ isPackaged, resourcesPath, appVersion, userDataDir = null, onLog = () => {} }) {
+async function startBackend({
+  isPackaged,
+  resourcesPath,
+  appVersion,
+  userDataDir = null,
+  onLog = () => {},
+  beforeStart = null,
+}) {
   const port = await getFreePort();
   const { command, args, cwd } = resolveCommand(isPackaged, resourcesPath);
 
@@ -161,6 +204,19 @@ async function startBackend({ isPackaged, resourcesPath, appVersion, userDataDir
 
   onLog(`Starting backend: ${command} ${args.join(" ")} (port ${port}, version ${appVersion || "dev"})`);
   onLog(`Data directory: ${dataDir || "%LOCALAPPDATA%"} [${dataSource}]`);
+
+  // Hook for anything that must touch the data directory before SQLite and
+  // the seed bootstrap do - currently the portable->installed import. Runs
+  // here rather than in main.js so the directory is resolved exactly once.
+  // A failure is logged, not fatal: a broken import must still leave a
+  // working app.
+  if (beforeStart) {
+    try {
+      await beforeStart({ dataDir, dataSource });
+    } catch (err) {
+      onLog(`beforeStart hook failed: ${err.message}`);
+    }
+  }
 
   // --app-version comes from Electron's own package.json, which is what
   // electron-builder stamps the installer with. Passing it down keeps one
@@ -237,4 +293,35 @@ function stopBackend() {
   }, 4000);
 }
 
-module.exports = { startBackend, stopBackend, getFreePort, resolveDataDir };
+/**
+ * stopBackend(), but resolves only once the process has actually gone.
+ *
+ * stopBackend is fire-and-forget, which is fine when the whole app is
+ * exiting anyway. It is NOT fine before an update installs: the NSIS
+ * installer replaces resources/backend, and Windows refuses to overwrite a
+ * running executable or its loaded DLLs. Handing control to the installer
+ * while UFCPredictor.exe is still winding down produces a half-written
+ * install, so the update path awaits this instead.
+ *
+ * Resolves rather than rejects on timeout - blocking the update forever
+ * because a process took too long to die is worse than proceeding and
+ * letting the installer report a locked file.
+ */
+function stopBackendAndWait(timeoutMs = 15000) {
+  // Captured first: stopBackend() clears the module-level handle.
+  const proc = child;
+  stopBackend();
+
+  if (!proc || proc.exitCode !== null || proc.signalCode !== null) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    const finish = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(finish, timeoutMs);
+    proc.once("exit", finish);
+  });
+}
+
+module.exports = { startBackend, stopBackend, stopBackendAndWait, getFreePort, resolveDataDir };

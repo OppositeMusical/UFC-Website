@@ -64,7 +64,20 @@
   </div>
   <p class="status-detail" id="update-status">Checking&hellip;</p>
   <ul class="release-notes" id="release-notes" hidden></ul>
+
+  <div class="sync-progress" id="update-progress" hidden>
+    <div class="sync-progress__bar"><span class="sync-progress__fill" id="update-progress-fill"></span></div>
+    <span class="sync-progress__pct" id="update-progress-pct">0%</span>
+  </div>
+
+  {# Three mutually exclusive actions. The first two only ever appear in the
+     desktop app (which can install for itself); the link is the browser and
+     portable-build fallback. settings.js decides which, by feature test. #}
+  <button class="btn btn--primary" id="update-fetch-btn" hidden>Download Update</button>
+  <button class="btn btn--primary" id="update-install-btn" hidden>Restart &amp; Install</button>
   <a class="btn" id="update-download-btn" href="#" target="_blank" rel="noreferrer" hidden>Download the Update</a>
+
+  <p class="status-detail update-hint" id="update-hint" hidden></p>
 </div>
 {% endblock %}
 {% block extra_js %}

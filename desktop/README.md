@@ -96,6 +96,60 @@ two portable folders can't run side by side even though they have separate
 databases. That's stricter than necessary; scoping it per data directory
 would need a lock file rather than Electron's built-in lock.
 
+## In-app updates
+
+`updater.js` wraps `electron-updater`. The **NSIS installer** is the
+self-updating channel — electron-updater only supports NSIS on Windows, so
+the portable zip keeps the manual download-and-replace flow and reports
+`unsupported`.
+
+User flow: **Settings → Check for Updates → Download → Restart & Install**.
+
+### The rule for the IPC surface
+
+Every update method in `preload.js` is **argument-free**. The renderer runs
+the Flask UI, and the chat page displays model-generated text — treat it as
+potentially hostile. The renderer may ask the main process to check,
+download or install; it may never say *what* to download. The feed is pinned
+at build time by the `publish` block in `package.json`. An IPC method taking
+a URL would make any future XSS a remote-code-execution bug.
+
+### Don't forget latest.yml
+
+electron-updater polls `latest.yml` **on the GitHub release**, not the
+website's `version.json`. Forgetting to upload it is a silent failure: the
+app just keeps saying it is current. `build_release.py` copies it into
+`frontend/public/downloads/` alongside the installers and warns if the build
+did not produce one.
+
+Upload to the release: the installer `.exe`, its `.blockmap`, `latest.yml`,
+and the portable `.zip`. The `.blockmap` is what makes updates differential
+rather than a fresh ~250MB each time.
+
+### Testing without cutting a release
+
+```powershell
+$env:UFC_PREDICTOR_UPDATE_FEED = "http://localhost:9000/"   # serve latest.yml + installer
+```
+
+Recognised by `updater.js` and wired to a `generic` provider. Never set in a
+shipped build.
+
+The five things worth checking on a real installed build:
+
+1. Install `0.5.0`, publish `0.5.1`, confirm detect → download → install →
+   relaunch at `0.5.1`.
+2. **On a machine without the certificate in Trusted Root**, confirm the
+   failure names the certificate rather than reading as a corrupt download.
+3. Kill the network mid-download — expect resume or a clean error, never a
+   half-installed app.
+4. Confirm the data directory survives, and that a portable→installed switch
+   offers the import dialog.
+5. Confirm no orphaned `UFCPredictor.exe` in Task Manager afterwards.
+
+Only (2) and (5) have bitten this project before; both are why
+`describeError()` and `stopBackendAndWait()` exist.
+
 ## Code signing (self-signed, for testing)
 
 Builds are signed with a locally generated certificate: SHA256 digest,
@@ -119,6 +173,14 @@ afterwards leaves the copy inside the installer unsigned.
 On machines where you install the `.cer` into Trusted Root, the UAC prompt
 shows **the publisher name instead of "Unknown Publisher"**, and
 `signtool verify /pa` passes.
+
+**It also gates in-app updates.** `win.verifyUpdateCodeSignature` makes
+electron-updater check the downloaded installer's Authenticode signature
+against `publish[].publisherName` (`OppositeMusical`) before running it. On
+a machine that never imported the certificate, that check **fails and the
+update is refused** — correct behaviour, and it must stay, but it means
+skipping the trust step turns into a broken updater later, not just a scarier
+install dialog. `updater.js::describeError()` makes the message say so.
 
 **It does not clear SmartScreen for the public.** SmartScreen reputation is
 keyed to a publicly-trusted certificate that has accumulated download

@@ -93,3 +93,29 @@ test("electron-updater is a production dependency", () => {
 test("the app entry point is packaged", () => {
   assert.ok(isPackaged(pkg.main), `main entry "${pkg.main}" is not matched by build.files`);
 });
+
+test("the app icon exists and carries a 256px layer", () => {
+  // win.icon is a build resource, not something build.files covers, so the
+  // checks above would not notice it going missing. electron-builder needs
+  // a 256x256 entry and falls back to the stock Electron icon without one -
+  // silently, which is how the app shipped unbranded through 0.5.1.
+  const rel = pkg.build.win.icon;
+  assert.ok(rel, "win.icon is not configured");
+
+  const ico = fs.readFileSync(path.join(ROOT, rel));
+  assert.strictEqual(ico.readUInt16LE(2), 1, "not an .ico (type field should be 1)");
+
+  const count = ico.readUInt16LE(4);
+  assert.ok(count > 0, "icon has no entries");
+
+  const declared = [];
+  for (let i = 0; i < count; i++) {
+    const o = 6 + i * 16;
+    // 0 means 256 in an ICONDIRENTRY.
+    declared.push(ico.readUInt8(o) || 256);
+    const bytes = ico.readUInt32LE(o + 8);
+    const offset = ico.readUInt32LE(o + 12);
+    assert.ok(offset + bytes <= ico.length, `entry ${i} points past the end of the file`);
+  }
+  assert.ok(declared.includes(256), `icon has no 256px layer (found ${declared.join(", ")})`);
+});

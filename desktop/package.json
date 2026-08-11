@@ -1,6 +1,6 @@
 {
   "name": "ufc-predictor-desktop",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "private": true,
   "description": "Electron shell for the MMA Assist local Flask app",
   "author": "OppositeMusical",
@@ -52,6 +52,7 @@
           ]
         }
       ],
+      "icon": "build/icon.ico",
       "verifyUpdateCodeSignature": true,
       "signtoolOptions": {
         "certificateFile": "certs/code-signing.pfx",

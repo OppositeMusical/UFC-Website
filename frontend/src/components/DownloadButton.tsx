@@ -85,20 +85,7 @@ type Transfer =
   | { state: "done"; folder: string }
   | { state: "error"; message: string };
 
-interface DownloadButtonProps {
-  /**
-   * Fired once a download has actually started, on every route through this
-   * component (installer link, portable link, folder picker).
-   *
-   * Called AFTER the download begins, never before: the ad must not gate
-   * the thing the user came for, and for the folder-picker route firing
-   * earlier would put a modal on screen at the same time as the browser's
-   * native directory picker.
-   */
-  onDownload?: () => void;
-}
-
-export default function DownloadButton({ onDownload }: DownloadButtonProps = {}) {
+export default function DownloadButton() {
   const [info, setInfo] = useState<VersionInfo | null>(null);
   const [status, setStatus] = useState<Status>("loading");
   const [transfer, setTransfer] = useState<Transfer>({ state: "idle" });
@@ -120,9 +107,6 @@ export default function DownloadButton({ onDownload }: DownloadButtonProps = {})
     }
 
     setTransfer({ state: "saving", percent: 0 });
-    // The picker has closed and bytes are about to move - safe to surface
-    // the ad now without fighting the native dialog.
-    onDownload?.();
 
     try {
       const response = await fetch(artifact.downloadUrl);
@@ -238,12 +222,7 @@ export default function DownloadButton({ onDownload }: DownloadButtonProps = {})
   if (rootIsInstaller) {
     return (
       <div className="download-cta">
-        <a
-          className="btn btn--primary btn--download"
-          href={info.downloadUrl}
-          download
-          onClick={() => onDownload?.()}
-        >
+        <a className="btn btn--primary btn--download" href={info.downloadUrl} download>
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M12 3v12" />
             <path d="M7 12l5 5 5-5" />
@@ -312,12 +291,7 @@ export default function DownloadButton({ onDownload }: DownloadButtonProps = {})
                       : "Choose Folder & Download"}
                   </button>
                 ) : (
-                  <a
-                    className="btn btn--secondary"
-                    href={portable.downloadUrl}
-                    download
-                    onClick={() => onDownload?.()}
-                  >
+                  <a className="btn btn--secondary" href={portable.downloadUrl} download>
                     Download portable zip
                   </a>
                 )}
@@ -335,7 +309,7 @@ export default function DownloadButton({ onDownload }: DownloadButtonProps = {})
                 {transfer.state === "error" && (
                   <p className="transfer-note transfer-note--err">
                     {transfer.message}{" "}
-                    <a href={portable.downloadUrl} download onClick={() => onDownload?.()}>
+                    <a href={portable.downloadUrl} download>
                       Download normally instead
                     </a>
                     .
@@ -376,12 +350,7 @@ export default function DownloadButton({ onDownload }: DownloadButtonProps = {})
           )}
         </button>
       ) : (
-        <a
-          className="btn btn--primary btn--download"
-          href={info.downloadUrl}
-          download
-          onClick={() => onDownload?.()}
-        >
+        <a className="btn btn--primary btn--download" href={info.downloadUrl} download>
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M12 3v12" />
             <path d="M7 12l5 5 5-5" />
@@ -405,7 +374,7 @@ export default function DownloadButton({ onDownload }: DownloadButtonProps = {})
       {transfer.state === "error" && (
         <p className="transfer-note transfer-note--err">
           {transfer.message}{" "}
-          <a href={info.downloadUrl} download onClick={() => onDownload?.()}>
+          <a href={info.downloadUrl} download>
             Download normally instead
           </a>
           .

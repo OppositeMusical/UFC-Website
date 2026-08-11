@@ -93,6 +93,64 @@ def fighter_db_status() -> dict:
     }
 
 
+def fighter_db_detail() -> dict:
+    """Prose for the Settings -> Fighter Database card.
+
+    Built on fighter_db_status()'s measured counts, deliberately, because
+    the card used to read the `last_fighter_sync_at` setting instead. That
+    setting is only written by a user-triggered sync, so a seeded install
+    has none - and the card told those users "Never synced - predictions
+    won't have real stats until you sync" while the dashboard, querying the
+    same table, reported thousands of fighters with stats. Two surfaces,
+    one database, opposite answers, and the wrong one sat next to the
+    button that starts a multi-hour scrape.
+
+    Returns a chip label matching the dashboard's, plus the one thing the
+    old card never said: whether syncing would actually fetch anything.
+    """
+    status = fighter_db_status()
+    total = status["total"]
+    with_stats = status["with_stats"]
+    age_days = status["age_days"]
+
+    if not total or not with_stats:
+        return {
+            "level": "err",
+            "chip": "No fighter stats loaded",
+            "advice": (
+                "Predictions have no real numbers to reason about until this is filled in. "
+                "The app ships with a database included, so an empty one usually means the "
+                "data folder was cleared - Sync Now rebuilds it from ufc.com."
+            ),
+        }
+
+    missing = total - with_stats
+    chip = f"{with_stats:,} of {total:,} fighters have career stats"
+    if age_days is not None:
+        chip += " · scraped today" if age_days == 0 else f" · scraped {age_days}d ago"
+
+    if age_days is not None and age_days >= STALE_AFTER_DAYS:
+        advice = f"These are more than {STALE_AFTER_DAYS} days old, so Sync Now will refresh them"
+        advice += (
+            f", and fill in the {missing:,} fighters that still have only a name and record."
+            if missing
+            else "."
+        )
+    elif missing:
+        advice = (
+            f"The remaining {missing:,} are known by name and record but have no striking or "
+            "grappling numbers yet, so predictions involving them lean on the model instead of "
+            "the data. Sync Now fetches the ones that are missing."
+        )
+    else:
+        advice = (
+            "Every fighter on record has full stats and they are recent, so there is nothing "
+            f"to fetch until they age past {STALE_AFTER_DAYS} days."
+        )
+
+    return {"level": status["level"], "chip": chip, "advice": advice}
+
+
 def provider_status() -> dict:
     """Whether the configured AI provider is actually usable right now.
 

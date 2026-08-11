@@ -37,12 +37,19 @@
 
 <div class="card">
   <h2>Fighter Database</h2>
+  {# Same chip markup as the dashboard, fed by the same measured counts, so
+     the two surfaces cannot disagree about what is in the database. #}
+  <div class="status-row">
+    <span class="status-chip {{ db_detail.level }}">
+      <span class="status-dot"></span>
+      <span class="status-chip__text">{{ db_detail.chip }}</span>
+    </span>
+  </div>
+  <p class="page-subtitle">{{ db_detail.advice }}</p>
   <p class="page-subtitle">
-    {% if last_sync %}Last synced: {{ last_sync }}{% else %}Never synced - predictions won't have real stats until you sync.{% endif %}
-  </p>
-  <p class="page-subtitle">
-    A full sync respects ufc.com's stated crawl rate and can take a long time for the whole roster; it's safe to
-    close the app and resume later - already-scraped fighters are skipped.
+    Syncing respects ufc.com's stated crawl rate, so a full pass over the roster runs for hours
+    rather than minutes. You can close the app and come back to it - fighters that have already
+    been scraped are skipped, so a resumed sync carries on from where it stopped.
   </p>
   <button class="btn" id="sync-fighters-btn">Sync Now</button>
   <span id="sync-status" class="page-subtitle" style="margin-left:0.75rem;"></span>

@@ -17,6 +17,7 @@ from app.services.ai.factory import PROVIDER_NAMES, build_provider
 from app.services.ai.ollama_provider import OllamaProvider
 from app.services.db.session import get_setting, set_setting
 from app.services.secrets import secret_manager
+from app.services.status import fighter_db_detail
 from app.version import get_current_version
 
 bp = Blueprint("settings", __name__, url_prefix="/settings")
@@ -32,15 +33,17 @@ _sync_lock = threading.Lock()
 def index():
     active_provider = get_setting(KEY_ACTIVE_PROVIDER, default="ollama")
     active_ollama_model = get_setting(KEY_ACTIVE_OLLAMA_MODEL, default="")
-    last_sync = get_setting(KEY_LAST_FIGHTER_SYNC_AT)
     configured = {name: secret_manager.has_key(name) for name in PROVIDER_NAMES if name != "ollama"}
+    # Deliberately not last_fighter_sync_at: that setting only exists after a
+    # manual sync, so it reported "Never synced" on a seeded database. The
+    # fighters table itself is the source of truth - see fighter_db_detail.
     return render_template(
         "settings.html",
         providers=PROVIDER_NAMES,
         active_provider=active_provider,
         active_ollama_model=active_ollama_model,
         configured=configured,
-        last_sync=last_sync,
+        db_detail=fighter_db_detail(),
         current_version=get_current_version(),
     )
 

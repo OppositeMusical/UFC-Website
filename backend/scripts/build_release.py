@@ -59,7 +59,14 @@ DOWNLOADS_DIR = PUBLIC_DIR / "downloads"
 ARTIFACT_KINDS: dict[str, tuple[tuple[str, str, str], ...]] = {
     # (glob, kind, published-name template)
     "win": (
-        ("*-setup-*.exe", "nsis", "MMA-Assist-{version}-setup-win64.exe"),
+        # The installer's published name MUST match the filename inside
+        # latest.yml. electron-builder writes "MMA Assist-<v>-setup-x64.exe"
+        # to disk but URL-encodes the space to a hyphen in latest.yml, and
+        # electron-updater resolves the asset by that encoded name - so
+        # renaming to anything else (an earlier draft used "win64") 404s the
+        # download and updates silently never install. check_update_manifest
+        # below enforces the match rather than trusting this string.
+        ("*-setup-*.exe", "nsis", "MMA-Assist-{version}-setup-x64.exe"),
         ("*-win.zip", "portable", "MMA-Assist-{version}-portable-win64.zip"),
     ),
     # The .zip electron-builder also emits for mac exists for auto-update,
@@ -119,6 +126,45 @@ def find_artifacts(version: str | None, platform: str = "win") -> tuple[list[tup
     return [(p, k, n.format(version=resolved_version)) for p, k, n in found], resolved_version
 
 
+def check_update_manifest(nsis_asset_name: str, version: str) -> None:
+    """Fails the publish if latest.yml disagrees with what we are shipping.
+
+    electron-updater downloads whatever filename latest.yml names. If the
+    asset uploaded to the release is called something else, or is from a
+    different build, the update 404s or fails its sha512 check - and does so
+    *silently*, because a failed check just leaves the app reporting that it
+    is current. There is no error a user would ever report.
+
+    Cheap to verify here, so verify it here.
+    """
+    manifest = RELEASE_DIR / "latest.yml"
+    if not manifest.exists():
+        sys.exit(
+            "No latest.yml in desktop/release/.\n"
+            "electron-updater polls that file; without it, in-app updates never fire.\n"
+            "It is produced by the nsis target - did `npm run dist` build one?"
+        )
+
+    text = manifest.read_text(encoding="utf-8")
+    named = re.search(r"^path:\s*(.+?)\s*$", text, re.MULTILINE)
+    declared_version = re.search(r"^version:\s*(.+?)\s*$", text, re.MULTILINE)
+
+    if not named:
+        sys.exit(f"Could not read a 'path:' out of {manifest} - refusing to publish blind.")
+    if named.group(1) != nsis_asset_name:
+        sys.exit(
+            f"latest.yml names '{named.group(1)}' but this run publishes "
+            f"'{nsis_asset_name}'.\nelectron-updater fetches the name in latest.yml, so the "
+            "update would 404. Fix ARTIFACT_KINDS or nsis.artifactName so the two agree."
+        )
+    if declared_version and declared_version.group(1) != version:
+        sys.exit(
+            f"latest.yml is for version {declared_version.group(1)} but the artifacts are "
+            f"{version}. Stale build output - re-run `npm run dist`."
+        )
+    print(f"latest.yml agrees: {named.group(1)} @ {version}")
+
+
 def sha256_of(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as fh:
@@ -173,6 +219,24 @@ def main() -> None:
         sys.exit("Use either --download-url or --github-release, not both.")
 
     artifacts, version = find_artifacts(args.version, args.platform)
+
+    print("Publishing:")
+    for artifact, kind, asset_name in artifacts:
+        # Print the SOURCE filename too. desktop/release/ accumulates old
+        # builds, and the globs match by pattern - seeing "0.4.0-win.zip"
+        # about to be published as "0.5.0-portable" is the only warning you
+        # would get before shipping a mislabelled artifact.
+        print(f"  {kind:9} {artifact.name}  ->  {asset_name}")
+
+    if args.platform == "win":
+        nsis = next((name for _p, kind, name in artifacts if kind == "nsis"), None)
+        if nsis is None:
+            sys.exit(
+                "No NSIS installer in desktop/release/. That is the only Windows target "
+                "electron-updater can update in place - publishing without it means no "
+                "in-app updates for this release."
+            )
+        check_update_manifest(nsis, version)
 
     DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
     if not args.keep_old:
@@ -234,8 +298,16 @@ def main() -> None:
     if args.platform == "win":
         for pattern in UPDATE_METADATA_GLOBS:
             for meta in RELEASE_DIR.glob(pattern):
-                shutil.copyfile(meta, DOWNLOADS_DIR / meta.name)
-                update_metadata.append(meta.name)
+                # Spaces -> hyphens, for the same reason the installer is
+                # renamed: electron-updater fetches the blockmap by appending
+                # ".blockmap" to the installer's URL, so "MMA Assist-...exe
+                # .blockmap" is a 404 against a hyphenated installer name.
+                # That one degrades quietly - the update still works, it just
+                # downloads all 178MB instead of the changed blocks, silently
+                # discarding the reason NSIS was chosen over the zip.
+                published = meta.name.replace(" ", "-")
+                shutil.copyfile(meta, DOWNLOADS_DIR / published)
+                update_metadata.append(published)
 
     # The primary artifact (first in ARTIFACT_KINDS) is what the platform
     # entry and the legacy top-level fields describe.

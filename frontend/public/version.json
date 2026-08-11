@@ -1,32 +1,31 @@
 {
-  "version": "0.5.0",
+  "version": "0.5.1",
   "releasedAt": "2026-08-11",
   "releaseNotes": [
-    "MMA Assist now updates itself - Settings, Check for Updates, Restart & Install",
-    "New Windows installer; the portable zip is still available on the download page",
-    "Security fixes: the local app server now rejects requests from other websites",
-    "Existing users: install this one by hand, then future updates happen in-app"
+    "Fixes v0.5.0, which crashed on launch with \"Cannot find module\" - two files were missing from the package",
+    "In-app updates now install silently instead of reopening the setup wizard",
+    "Verified end to end: 0.5.0 installs 0.5.1 by itself and relaunches, with your data intact"
   ],
   "platforms": {
     "win": {
-      "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/MMA-Assist-0.5.0-setup-x64.exe",
-      "fileName": "MMA-Assist-0.5.0-setup-x64.exe",
+      "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/MMA-Assist-0.5.1-setup-x64.exe",
+      "fileName": "MMA-Assist-0.5.1-setup-x64.exe",
       "kind": "nsis",
-      "sizeBytes": 187327232,
-      "sha256": "8e6a33b581e25169c3268dd8e1a77a7a283498c26e7ec86149331cab86d09d76"
+      "sizeBytes": 187327344,
+      "sha256": "9535cc52b90b9c7492a07226610f86db0f9702623964c7054e39cb1acd4219a1"
     },
     "winPortable": {
-      "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/MMA-Assist-0.5.0-portable-win64.zip",
-      "fileName": "MMA-Assist-0.5.0-portable-win64.zip",
+      "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/MMA-Assist-0.5.1-portable-win64.zip",
+      "fileName": "MMA-Assist-0.5.1-portable-win64.zip",
       "kind": "portable",
-      "sizeBytes": 244403744,
-      "sha256": "8a5b94596d02230606e93d20f084f5315d0baf5e35e5a4a89884e7b5550ac327"
+      "sizeBytes": 244403979,
+      "sha256": "f85cfcf1c0433a2e6a9488cc655d1e6ef175c537facd3ebca28e9aaf73fcb496"
     }
   },
   "notes": "Points at the latest GitHub release of OppositeMusical/UFC-Website. Create that release and upload the assets, or the links 404.",
-  "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/MMA-Assist-0.5.0-setup-x64.exe",
-  "fileName": "MMA-Assist-0.5.0-setup-x64.exe",
+  "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/MMA-Assist-0.5.1-setup-x64.exe",
+  "fileName": "MMA-Assist-0.5.1-setup-x64.exe",
   "kind": "nsis",
-  "sizeBytes": 187327232,
-  "sha256": "8e6a33b581e25169c3268dd8e1a77a7a283498c26e7ec86149331cab86d09d76"
+  "sizeBytes": 187327344,
+  "sha256": "9535cc52b90b9c7492a07226610f86db0f9702623964c7054e39cb1acd4219a1"
 }

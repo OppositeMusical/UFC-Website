@@ -235,9 +235,17 @@ async function install() {
   log("[updater] stopping backend before handing over to the installer");
   await stopBackendAndWait();
 
-  // isSilent=false so the user sees the installer's own progress;
+  // isSilent=TRUE. This is not a preference - with `oneClick: false` the
+  // NSIS build is an *assisted* installer, so a non-silent quitAndInstall
+  // renders the full setup wizard and blocks on it. Verified by driving a
+  // real 0.5.0 -> 0.5.1 update: the app quit, the installer launched, and
+  // then sat waiting for someone to click Next. The user already consented
+  // by pressing "Restart & Install"; making them click through setup again
+  // is not self-updating, and if they close the wizard the app is simply
+  // gone until they start it by hand.
+  //
   // isForceRunAfter=true relaunches the new version when it finishes.
-  setImmediate(() => autoUpdater.quitAndInstall(false, true));
+  setImmediate(() => autoUpdater.quitAndInstall(true, true));
   return { status: "installing" };
 }
 

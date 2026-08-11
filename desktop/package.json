@@ -1,8 +1,9 @@
 {
   "name": "ufc-predictor-desktop",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "description": "Electron shell for the MMA Assist local Flask app",
+  "author": "OppositeMusical",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

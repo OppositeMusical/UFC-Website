@@ -1,6 +1,7 @@
 import { Routes, Route } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
+import NavigationAd from "./components/NavigationAd";
 import ScrollProgress from "./components/ScrollProgress";
 import Home from "./pages/Home";
 import Download from "./pages/Download";
@@ -10,6 +11,7 @@ export default function App() {
   return (
     <>
       <ScrollProgress />
+      <NavigationAd />
       <Navbar />
       <Routes>
         <Route path="/" element={<Home />} />

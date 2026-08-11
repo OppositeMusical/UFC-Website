@@ -971,3 +971,133 @@ a {
     transform: none;
   }
 }
+
+/* ---------------------------------------------------------------------
+   Ad popups
+
+   Modal overlays rather than window.open: browsers block pop-ups outright
+   on page load, and restrict them heavily even behind a click. z-index
+   sits above the navbar (40) and scroll progress (30) so nothing pokes
+   through the backdrop.
+
+   Motion is handled by the global prefers-reduced-motion block, which
+   collapses these animations to ~0ms. They animate from hidden to visible
+   and the base state is visible, so collapsing them shows the ad instantly
+   rather than leaving it stuck invisible.
+   --------------------------------------------------------------------- */
+.ad-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(4, 4, 6, 0.72);
+  backdrop-filter: blur(6px);
+  animation: ad-fade var(--dur-mid) var(--ease-out);
+}
+
+.ad-modal {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+  padding: 2rem 1.75rem 1.6rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel-raised);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+  animation: ad-pop var(--dur-mid) var(--ease-spring);
+  /* Long network creatives must scroll inside the card, not push the close
+     button off-screen on a short viewport. */
+  max-height: calc(100vh - 2.5rem);
+  overflow-y: auto;
+}
+
+.ad-modal__tag {
+  display: inline-block;
+  margin-bottom: 0.9rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.ad-modal__close {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.7rem;
+  display: grid;
+  place-items: center;
+  /* 34px: below the 44px touch-target ideal, but an oversized close button
+     on a small ad card crowds the creative. Padding-free grid centring keeps
+     the hit area the full square. */
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.ad-modal__close:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+  transform: rotate(90deg);
+}
+
+.ad-modal__close:focus-visible {
+  outline: 2px solid var(--accent-crimson);
+  outline-offset: 2px;
+}
+
+.ad-modal__body h2 {
+  margin: 0 0 0.6rem;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  color: var(--text-primary);
+}
+
+.ad-modal__body p {
+  margin: 0 0 1.3rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.ad-modal__image {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-bottom: 1.1rem;
+  border-radius: var(--radius);
+}
+
+.ad-modal__network {
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+}
+
+.ad-modal__footnote {
+  margin: 1.1rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+@keyframes ad-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes ad-pop {
+  from { opacity: 0; transform: translateY(14px) scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}

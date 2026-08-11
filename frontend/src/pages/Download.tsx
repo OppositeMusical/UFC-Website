@@ -1,8 +1,14 @@
+import { useState } from "react";
+import AdModal from "../components/AdModal";
 import DownloadButton from "../components/DownloadButton";
 import MacDownload from "../components/MacDownload";
 import Reveal from "../components/Reveal";
+import { creativeFor } from "../ads/creatives";
 
 export default function Download() {
+  const [showDownloadAd, setShowDownloadAd] = useState(false);
+  const downloadAd = creativeFor("download");
+
   return (
     <section className="section section--first">
       <div className="container">
@@ -16,7 +22,7 @@ export default function Download() {
 
         <Reveal delay={90} from="scale">
           <div className="download-card">
-            <DownloadButton />
+            <DownloadButton onDownload={() => downloadAd && setShowDownloadAd(true)} />
           </div>
         </Reveal>
 
@@ -66,6 +72,14 @@ export default function Download() {
           DraftKings, or Kalshi.
         </div>
       </div>
+
+      {showDownloadAd && downloadAd && (
+        <AdModal
+          creative={downloadAd}
+          onClose={() => setShowDownloadAd(false)}
+          footnote="Your download has already started. Closing this won't cancel it."
+        />
+      )}
     </section>
   );
 }

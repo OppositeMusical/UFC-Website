@@ -33,7 +33,9 @@ class Config:
         return cls.data_dir() / "ufc_predictor.db"
 
     @classmethod
-    def SQLALCHEMY_DATABASE_URI(cls) -> str:  # noqa: N802 - Flask-SQLAlchemy convention
+    # Upper-case by Flask-SQLAlchemy convention, though this app uses plain
+    # SQLAlchemy - app/__init__.py reads it to build the engine.
+    def SQLALCHEMY_DATABASE_URI(cls) -> str:  # noqa: N802
         return f"sqlite:///{cls.sqlite_path()}"
 
     @classmethod
@@ -50,7 +52,6 @@ class Config:
     def fallback_key_path(cls) -> Path:
         return cls.data_dir() / ".secrets.key"
 
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
     DEFAULT_PORT = 8765
     UFC_BASE_URL = "https://www.ufc.com"
     UFC_CRAWL_DELAY_SECONDS = 15

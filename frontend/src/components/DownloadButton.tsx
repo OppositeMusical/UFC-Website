@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
 import {
   formatSize,
   useVersionJson,
@@ -10,14 +9,6 @@ import {
 type Status = "loading" | "ready" | "unavailable";
 
 const RELEASES_URL = "https://github.com/OppositeMusical/UFC-Website/releases";
-
-const DOWNLOAD_ICON = (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M12 3v12" />
-    <path d="M7 12l5 5 5-5" />
-    <path d="M4 21h16" />
-  </svg>
-);
 
 /**
  * The "no build published" state has two audiences. On a dev machine the
@@ -37,7 +28,7 @@ function isLocalhost(): boolean {
  * built from the repo (Railway, Netlify, a fresh clone) has a version.json
  * pointing at /downloads/... with no file behind it. Without this check the
  * page renders a confident-looking button that 404s - the exact failure the
- * placeholder-URL guard above exists to prevent.
+ * placeholder-URL guard below exists to prevent.
  *
  * Only relative URLs are probed: an absolute one points at a release host
  * that will refuse a cross-origin HEAD, and a CORS failure is not evidence
@@ -69,18 +60,6 @@ type Transfer =
   | { state: "done"; folder: string }
   | { state: "error"; message: string };
 
-// ---- Blocks shared by the installer and legacy render paths ----------
-
-function VersionLine({ version, sizeBytes }: { version: string; sizeBytes?: number }) {
-  const size = formatSize(sizeBytes);
-  return (
-    <p className="download-card__version">
-      Version {version}
-      {size ? ` · ${size}` : ""} · Windows 10/11 (64-bit)
-    </p>
-  );
-}
-
 function WhatsNew({ info }: { info: VersionInfo }) {
   if (!info.releaseNotes || info.releaseNotes.length === 0) return null;
   return (
@@ -95,57 +74,6 @@ function WhatsNew({ info }: { info: VersionInfo }) {
         ))}
       </ul>
     </div>
-  );
-}
-
-function Sha256({ value }: { value?: string }) {
-  if (!value) return null;
-  return (
-    <p className="download-card__hash">
-      <span>SHA-256</span>
-      <code>{value}</code>
-    </p>
-  );
-}
-
-/**
- * Progress / saved / failed feedback for a folder-picker transfer. Rendered
- * identically in both places a transfer can happen; `doneSuffix` carries the
- * one sentence that differs after "run MMA Assist.exe".
- */
-function TransferStatus({
-  transfer,
-  retryUrl,
-  doneSuffix,
-}: {
-  transfer: Transfer;
-  retryUrl: string;
-  doneSuffix?: ReactNode;
-}) {
-  return (
-    <>
-      {transfer.state === "saving" && (
-        <div className="transfer-bar" role="progressbar" aria-valuenow={transfer.percent} aria-valuemin={0} aria-valuemax={100}>
-          <span className="transfer-bar__fill" style={{ width: `${transfer.percent}%` }} />
-        </div>
-      )}
-      {transfer.state === "done" && (
-        <p className="transfer-note transfer-note--ok">
-          Saved to <strong>{transfer.folder}</strong>. Extract the zip there, then run{" "}
-          <code>MMA Assist.exe</code>
-          {doneSuffix ?? "."}
-        </p>
-      )}
-      {transfer.state === "error" && (
-        <p className="transfer-note transfer-note--err">
-          {transfer.message}{" "}
-          <a href={retryUrl} download>
-            Download normally instead
-          </a>
-          .
-        </p>
-      )}
-    </>
   );
 }
 
@@ -262,125 +190,104 @@ export default function DownloadButton() {
     );
   }
 
-  // From 0.5.0 the manifest's primary Windows artifact is the NSIS
-  // installer, because it is the only Windows target electron-updater can
-  // update in place. The portable zip moved to platforms.winPortable.
-  //
-  // Older manifests put the portable zip at the root with kind "portable",
-  // and this page is served to whoever loads it - including someone hitting
-  // a cached deploy - so both shapes have to render.
-  const rootIsInstaller = info.kind === "nsis";
-  const portable: PlatformArtifact | null =
-    info.platforms?.winPortable ?? (rootIsInstaller ? null : info);
-
-  if (rootIsInstaller) {
-    return (
-      <div className="download-cta">
-        <a className="btn btn--primary btn--download" href={info.downloadUrl} download>
-          {DOWNLOAD_ICON}
-          Download for Windows
-        </a>
-
-        <VersionLine version={info.version} sizeBytes={info.sizeBytes} />
-        <p className="download-card__meta">
-          Installer · Fighter database included · <strong>Updates itself</strong> — later
-          releases install from inside the app.
-        </p>
-
-        <WhatsNew info={info} />
-        <Sha256 value={info.sha256} />
-
-        {portable && (
-          <div className="portable-option">
-            <button
-              type="button"
-              className="link-button"
-              onClick={() => setPortableOpen((open) => !open)}
-              aria-expanded={portableOpen}
-            >
-              {portableOpen ? "Hide" : "Prefer not to install? Get the portable version"}
-            </button>
-
-            {portableOpen && (
-              <div className="portable-option__body">
-                <p className="download-card__meta">
-                  A zip you extract anywhere — nothing is installed and the app keeps its data
-                  in a <code>data</code> folder beside the exe. It does{" "}
-                  <strong>not</strong> update itself; you download and replace it by hand.
-                </p>
-                {supportsFolderPicker() ? (
-                  <button
-                    type="button"
-                    className="btn btn--secondary"
-                    onClick={() => handlePickFolder(portable)}
-                    disabled={transfer.state === "saving"}
-                  >
-                    {transfer.state === "saving"
-                      ? `Saving… ${transfer.percent}%`
-                      : "Choose Folder & Download"}
-                  </button>
-                ) : (
-                  <a className="btn btn--secondary" href={portable.downloadUrl} download>
-                    Download portable zip
-                  </a>
-                )}
-                <TransferStatus transfer={transfer} retryUrl={portable.downloadUrl} />
-                {portable.sizeBytes && (
-                  <p className="download-card__version">{formatSize(portable.sizeBytes)} zip</p>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  }
+  // The manifest's primary Windows artifact is always the NSIS installer -
+  // the only Windows target electron-updater can update in place. The
+  // portable zip lives under platforms.winPortable.
+  const portable: PlatformArtifact | null = info.platforms?.winPortable ?? null;
+  const size = formatSize(info.sizeBytes);
 
   return (
     <div className="download-cta">
-      {supportsFolderPicker() ? (
-        <button
-          type="button"
-          className="btn btn--primary btn--download"
-          onClick={() => handlePickFolder(info)}
-          disabled={transfer.state === "saving"}
-        >
-          {transfer.state === "saving" ? (
-            <>
-              <span className="btn__spinner" aria-hidden="true" />
-              Saving… {transfer.percent}%
-            </>
-          ) : (
-            <>
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-              </svg>
-              Choose Folder &amp; Download
-            </>
-          )}
-        </button>
-      ) : (
-        <a className="btn btn--primary btn--download" href={info.downloadUrl} download>
-          {DOWNLOAD_ICON}
-          Download for Windows
-        </a>
-      )}
+      <a className="btn btn--primary btn--download" href={info.downloadUrl} download>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M12 3v12" />
+          <path d="M7 12l5 5 5-5" />
+          <path d="M4 21h16" />
+        </svg>
+        Download for Windows
+      </a>
 
-      <TransferStatus
-        transfer={transfer}
-        retryUrl={info.downloadUrl}
-        doneSuffix={
-          <>
-            {" "}— it creates its <code>data</code> folder alongside itself.
-          </>
-        }
-      />
-
-      <VersionLine version={info.version} sizeBytes={info.sizeBytes} />
-      <p className="download-card__meta">Desktop app · Fighter database included</p>
+      <p className="download-card__version">
+        Version {info.version}
+        {size ? ` · ${size}` : ""} · Windows 10/11 (64-bit)
+      </p>
+      <p className="download-card__meta">
+        Installer · Fighter database included · <strong>Updates itself</strong> — later
+        releases install from inside the app.
+      </p>
 
       <WhatsNew info={info} />
-      <Sha256 value={info.sha256} />
+
+      {info.sha256 && (
+        <p className="download-card__hash">
+          <span>SHA-256</span>
+          <code>{info.sha256}</code>
+        </p>
+      )}
+
+      {portable && (
+        <div className="portable-option">
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => setPortableOpen((open) => !open)}
+            aria-expanded={portableOpen}
+          >
+            {portableOpen ? "Hide" : "Prefer not to install? Get the portable version"}
+          </button>
+
+          {portableOpen && (
+            <div className="portable-option__body">
+              <p className="download-card__meta">
+                A zip you extract anywhere — nothing is installed and the app keeps its data
+                in a <code>data</code> folder beside the exe. It does{" "}
+                <strong>not</strong> update itself; you download and replace it by hand.
+              </p>
+              {supportsFolderPicker() ? (
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  onClick={() => handlePickFolder(portable)}
+                  disabled={transfer.state === "saving"}
+                >
+                  {transfer.state === "saving"
+                    ? `Saving… ${transfer.percent}%`
+                    : "Choose Folder & Download"}
+                </button>
+              ) : (
+                <a className="btn btn--secondary" href={portable.downloadUrl} download>
+                  Download portable zip
+                </a>
+              )}
+
+              {transfer.state === "saving" && (
+                <div className="transfer-bar" role="progressbar" aria-valuenow={transfer.percent} aria-valuemin={0} aria-valuemax={100}>
+                  <span className="transfer-bar__fill" style={{ width: `${transfer.percent}%` }} />
+                </div>
+              )}
+              {transfer.state === "done" && (
+                <p className="transfer-note transfer-note--ok">
+                  Saved to <strong>{transfer.folder}</strong>. Extract the zip there, then run{" "}
+                  <code>MMA Assist.exe</code>.
+                </p>
+              )}
+              {transfer.state === "error" && (
+                <p className="transfer-note transfer-note--err">
+                  {transfer.message}{" "}
+                  <a href={portable.downloadUrl} download>
+                    Download normally instead
+                  </a>
+                  .
+                </p>
+              )}
+
+              {portable.sizeBytes && (
+                <p className="download-card__version">{formatSize(portable.sizeBytes)} zip</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

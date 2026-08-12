@@ -20,17 +20,34 @@ function mockVersionJson(body: unknown, ok = true, assetOk = true) {
   );
 }
 
+/**
+ * The shape build_release.py actually emits: the NSIS installer at the root
+ * (what installed copies poll for updates) with the portable zip under
+ * platforms.winPortable. This is the only Windows manifest shape the app
+ * has to render - the pre-0.5.0 "portable at the root" form was dropped in
+ * 0.5.5 once no install older than that remained in the wild.
+ */
+const MANIFEST = {
+  version: "0.5.5",
+  downloadUrl: "/downloads/MMA-Assist-0.5.5-setup-x64.exe",
+  fileName: "MMA-Assist-0.5.5-setup-x64.exe",
+  kind: "nsis",
+  sizeBytes: 187305976,
+  sha256: "01ef96c645ec4155342da68721fd5019ab1a29112ea12ac7df2a080f34672598",
+  releasedAt: "2026-08-11",
+  releaseNotes: ["Runs as a real desktop app", "Kalshi market questions"],
+  platforms: {
+    winPortable: {
+      downloadUrl: "/downloads/MMA-Assist-0.5.5-portable-win64.zip",
+      fileName: "MMA-Assist-0.5.5-portable-win64.zip",
+      kind: "portable",
+      sizeBytes: 243864618,
+    },
+  },
+};
+
 beforeEach(() => {
-  mockVersionJson({
-    version: "0.1.0",
-    downloadUrl: "/downloads/MMA-Assist-0.2.0-portable-win64.zip",
-    fileName: "MMA-Assist-0.2.0-portable-win64.zip",
-    kind: "portable",
-    sizeBytes: 243864618,
-    sha256: "01ef96c645ec4155342da68721fd5019ab1a29112ea12ac7df2a080f34672598",
-    releasedAt: "2026-08-04",
-    releaseNotes: ["Runs as a real desktop app", "Kalshi market questions"],
-  });
+  mockVersionJson(MANIFEST);
 });
 
 describe("App", () => {
@@ -133,28 +150,8 @@ describe("scroll reveal", () => {
   });
 });
 
-describe("DownloadButton - installer manifest (0.5.0+)", () => {
-  const INSTALLER_MANIFEST = {
-    version: "0.5.0",
-    downloadUrl: "/downloads/MMA-Assist-0.5.0-setup-win64.exe",
-    fileName: "MMA-Assist-0.5.0-setup-win64.exe",
-    kind: "nsis",
-    sizeBytes: 251658240,
-    sha256: "a".repeat(64),
-    platforms: {
-      win: {
-        downloadUrl: "/downloads/MMA-Assist-0.5.0-setup-win64.exe",
-        kind: "nsis",
-        sizeBytes: 251658240,
-      },
-      winPortable: {
-        downloadUrl: "/downloads/MMA-Assist-0.5.0-portable-win64.zip",
-        fileName: "MMA-Assist-0.5.0-portable-win64.zip",
-        kind: "portable",
-        sizeBytes: 243864618,
-      },
-    },
-  };
+describe("DownloadButton - installer manifest", () => {
+  const INSTALLER_MANIFEST = MANIFEST;
 
   function renderDownload() {
     return render(
@@ -169,7 +166,7 @@ describe("DownloadButton - installer manifest (0.5.0+)", () => {
     renderDownload();
 
     const link = await screen.findByRole("link", { name: /Download for Windows/i });
-    expect(link).toHaveAttribute("href", "/downloads/MMA-Assist-0.5.0-setup-win64.exe");
+    expect(link).toHaveAttribute("href", "/downloads/MMA-Assist-0.5.5-setup-x64.exe");
     expect(link).toHaveAttribute("download");
   });
 
@@ -196,12 +193,12 @@ describe("DownloadButton - installer manifest (0.5.0+)", () => {
     // jsdom has no showDirectoryPicker, so the zip renders as a plain link -
     // the same fallback Firefox and Safari users get.
     const zip = await screen.findByRole("link", { name: /Download portable zip/i });
-    expect(zip).toHaveAttribute("href", "/downloads/MMA-Assist-0.5.0-portable-win64.zip");
+    expect(zip).toHaveAttribute("href", "/downloads/MMA-Assist-0.5.5-portable-win64.zip");
   });
 
   it("still renders when no portable entry is published", async () => {
-    const { platforms, ...installerOnly } = INSTALLER_MANIFEST;
-    mockVersionJson({ ...installerOnly, platforms: { win: platforms.win } });
+    const { platforms: _omitted, ...installerOnly } = INSTALLER_MANIFEST;
+    mockVersionJson(installerOnly);
     renderDownload();
 
     await screen.findByRole("link", { name: /Download for Windows/i });
@@ -210,20 +207,18 @@ describe("DownloadButton - installer manifest (0.5.0+)", () => {
 });
 
 describe("DownloadButton", () => {
-  it("links to the portable zip and shows version, size and checksum", async () => {
+  it("links to the installer and shows version, size and checksum", async () => {
     render(
       <MemoryRouter initialEntries={["/download"]}>
         <App />
       </MemoryRouter>
     );
 
-    // jsdom has no showDirectoryPicker, so this exercises the fallback that
-    // Firefox and Safari users get: a plain download link.
     const link = await screen.findByRole("link", { name: /Download for Windows/i });
-    expect(link).toHaveAttribute("href", "/downloads/MMA-Assist-0.2.0-portable-win64.zip");
+    expect(link).toHaveAttribute("href", "/downloads/MMA-Assist-0.5.5-setup-x64.exe");
     expect(link).toHaveAttribute("download");
-    expect(screen.getByText(/Version 0\.1\.0/)).toBeInTheDocument();
-    expect(screen.getByText(/233 MB/)).toBeInTheDocument();
+    expect(screen.getByText(/Version 0\.5\.5/)).toBeInTheDocument();
+    expect(screen.getByText(/179 MB/)).toBeInTheDocument();
     // Full hash, not truncated - a partial checksum can't be verified.
     expect(
       screen.getByText("01ef96c645ec4155342da68721fd5019ab1a29112ea12ac7df2a080f34672598")
@@ -234,7 +229,7 @@ describe("DownloadButton", () => {
     // The committed default points at a github.com/your-org/... URL that
     // 404s. A button that looks ready and then fails is worse than none.
     mockVersionJson({
-      version: "0.1.0",
+      version: "0.5.5",
       downloadUrl: "https://github.com/your-org/ufc-predictor/releases/latest/download/UFCPredictor-windows.zip",
     });
 
@@ -268,16 +263,16 @@ describe("release notes", () => {
         <App />
       </MemoryRouter>
     );
-    expect(await screen.findByText(/What's new in 0\.1\.0/)).toBeInTheDocument();
+    expect(await screen.findByText(/What's new in 0\.5\.5/)).toBeInTheDocument();
     expect(screen.getByText("Runs as a real desktop app")).toBeInTheDocument();
     expect(screen.getByText("Kalshi market questions")).toBeInTheDocument();
   });
 
   it("omits the section entirely when a release has no notes", async () => {
     mockVersionJson({
-      version: "0.1.0",
-      downloadUrl: "/downloads/MMA-Assist-0.2.0-portable-win64.zip",
-      kind: "portable",
+      version: "0.5.5",
+      downloadUrl: "/downloads/MMA-Assist-0.5.5-setup-x64.exe",
+      kind: "nsis",
       sizeBytes: 186904009,
     });
 
@@ -329,9 +324,9 @@ describe("artifact availability", () => {
     // the repo has the manifest but not the 180MB installer.
     mockVersionJson(
       {
-        version: "0.1.0",
-        downloadUrl: "/downloads/MMA-Assist-0.2.0-portable-win64.zip",
-        kind: "portable",
+        version: "0.5.5",
+        downloadUrl: "/downloads/MMA-Assist-0.5.5-setup-x64.exe",
+        kind: "nsis",
       },
       true,
       false
@@ -352,9 +347,9 @@ describe("artifact availability", () => {
     // evidence the file is missing, so absolute URLs are taken at face value.
     mockVersionJson(
       {
-        version: "0.1.0",
+        version: "0.5.5",
         downloadUrl: "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/x.exe",
-        kind: "portable",
+        kind: "nsis",
       },
       true,
       false
@@ -382,7 +377,7 @@ describe("unavailable-build messaging", () => {
     });
 
     mockVersionJson(
-      { version: "0.1.0", downloadUrl: "/downloads/MMA-Assist-0.2.0-portable-win64.zip", kind: "portable" },
+      { version: "0.5.5", downloadUrl: "/downloads/MMA-Assist-0.5.5-setup-x64.exe", kind: "nsis" },
       true,
       false
     );
@@ -402,7 +397,7 @@ describe("unavailable-build messaging", () => {
 
   it("keeps the build hint when running locally", async () => {
     mockVersionJson(
-      { version: "0.1.0", downloadUrl: "/downloads/MMA-Assist-0.2.0-portable-win64.zip", kind: "portable" },
+      { version: "0.5.5", downloadUrl: "/downloads/MMA-Assist-0.5.5-setup-x64.exe", kind: "nsis" },
       true,
       false
     );
@@ -417,7 +412,10 @@ describe("unavailable-build messaging", () => {
   });
 });
 
-describe("folder picker", () => {
+// The picker only applies to the portable zip: the installer is a plain
+// <a download>, because it is handed to the OS to run rather than filed
+// somewhere the user chose.
+describe("folder picker (portable zip)", () => {
   it("offers a folder chooser when the browser supports it", async () => {
     // Chromium exposes showDirectoryPicker; jsdom does not, so stub it to
     // exercise the path Chrome/Edge users actually get.
@@ -431,11 +429,14 @@ describe("folder picker", () => {
       </MemoryRouter>
     );
 
+    await screen.findByRole("link", { name: /Download for Windows/i });
+    fireEvent.click(screen.getByRole("button", { name: /portable/i }));
+
     // A <button>, not an <a>: the file is written by JS into the chosen
     // directory rather than handed to the browser's download manager.
     const btn = await screen.findByRole("button", { name: /Choose Folder & Download/i });
     expect(btn).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /Download for Windows/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Download portable zip/i })).not.toBeInTheDocument();
 
     delete (window as unknown as Record<string, unknown>).showDirectoryPicker;
   });
@@ -451,8 +452,11 @@ describe("folder picker", () => {
       </MemoryRouter>
     );
 
-    const link = await screen.findByRole("link", { name: /Download for Windows/i });
-    expect(link).toHaveAttribute("download");
+    await screen.findByRole("link", { name: /Download for Windows/i });
+    fireEvent.click(screen.getByRole("button", { name: /portable/i }));
+
+    const zip = await screen.findByRole("link", { name: /Download portable zip/i });
+    expect(zip).toHaveAttribute("download");
   });
 });
 
@@ -472,11 +476,9 @@ describe("macOS download", () => {
 
   it("becomes a real download once version.json carries a mac artifact", async () => {
     mockVersionJson({
-      version: "0.4.0",
-      downloadUrl: "/downloads/MMA-Assist-0.4.0-portable-win64.zip",
-      kind: "portable",
+      ...MANIFEST,
       platforms: {
-        win: { downloadUrl: "/downloads/MMA-Assist-0.4.0-portable-win64.zip", kind: "portable" },
+        ...MANIFEST.platforms,
         mac: {
           downloadUrl: "https://example.test/MMA-Assist-0.4.0-macos.dmg",
           kind: "dmg",

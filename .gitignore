@@ -1,51 +1,12 @@
-# Python
-__pycache__/
-*.pyc
-.venv/
-*.egg-info/
-
-# Backend runtime/build artifacts
-backend/build/
-backend/dist/
-backend/*.spec.bak
-backend/data/
-backend/tests/**/__pycache__/
-
 # Node / frontend
 node_modules/
 frontend/dist/
 frontend/tsconfig.tsbuildinfo
 
-# Electron shell build output
-desktop/release/
-
-# Code-signing material. The .pfx contains the PRIVATE KEY - anyone who has
-# it can sign anything as this publisher, and on a machine that trusts the
-# root cert that software runs without a warning. Never commit it.
-desktop/certs/
-*.pfx
-*.p12
-*.snk
-
-# App data (never commit user data dirs if run from repo root during dev)
-.secrets.enc
-.secrets.key
-*.db
-
-# Baked seed data: a ~28MB build artifact regenerated from a completed
-# scrape via scripts/build_seed_data.py, not source. Only the placeholder
-# README is tracked (pyinstaller/app.spec needs the directory to exist).
-backend/seed_data_build/
-backend/app/seed_data/*
-!backend/app/seed_data/README.md
-backend/full_scrape.log
-backend/live_scrape_test.log
-
-# Packaged release zip (~100MB), rebuilt from backend/dist by
-# scripts/build_release.py. version.json stays tracked - it's the contract
-# the Download page reads - but the binary it points at is not.
+# Packaged release artifacts (~180MB installer + zip): published as GitHub
+# release assets, never committed. version.json stays tracked - it's the
+# contract the Download page reads - but the binaries it points at are not.
 frontend/public/downloads/
-backend/newuser_test_data/
 
 # Editor/OS cruft
 .DS_Store

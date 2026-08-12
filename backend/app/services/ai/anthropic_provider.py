@@ -28,12 +28,20 @@ class AnthropicProvider(AIProvider):
                 "no markdown code fences, no commentary before or after."
             )
             anthropic_system = (anthropic_system or "") + json_instruction
+        # Omit `system` entirely when there isn't one. An explicit None is not the
+        # SDK's "not given" sentinel - it serialises to `"system": null`, which the
+        # API rejects with `system: Input should be a valid array`. Only Settings ->
+        # Test Connection calls generate() without a system prompt, so this failed
+        # exactly where a user first tries their key.
+        optional: dict = {}
+        if anthropic_system is not None:
+            optional["system"] = anthropic_system
         try:
             response = self.client.messages.create(
                 model=self.model,
                 max_tokens=1500,
-                system=anthropic_system,
                 messages=messages,
+                **optional,
             )
         except AuthenticationError as exc:
             raise ProviderError("claude: API key was rejected") from exc

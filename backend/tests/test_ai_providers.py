@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
+from types import SimpleNamespace
+
 import pytest
 import responses
 
+from app.services.ai.anthropic_provider import AnthropicProvider
 from app.services.ai.base import ProviderError
 from app.services.ai.factory import build_provider
 from app.services.ai.ollama_provider import OllamaProvider
@@ -53,3 +57,84 @@ def test_build_provider_missing_key_raises(tmp_path, monkeypatch):
 def test_build_provider_unknown_name_raises():
     with pytest.raises(ProviderError):
         build_provider("not-a-real-provider")
+
+
+# --- Claude: the system parameter must be absent, never null -----------------
+#
+# v0.6.1 fixed a 400 from the real API - `system: Input should be a valid array`
+# - that fired on every Settings -> Test Connection with a Claude key, because
+# that is the one caller which passes no system prompt. These tests assert the
+# *outgoing request*, not the reply: a provider that sends `system=None` still
+# returns fine against a fake client, so asserting on the reply would pass while
+# the real API rejected the call.
+
+
+class _FakeMessages:
+    """Captures create() kwargs and returns a minimal Anthropic-shaped response."""
+
+    def __init__(self):
+        self.captured: dict = {}
+
+    def create(self, **kwargs):
+        self.captured = kwargs
+        return SimpleNamespace(
+            stop_reason="end_turn",
+            content=[SimpleNamespace(type="text", text="OK")],
+        )
+
+
+def _claude_with_fake_client() -> tuple[AnthropicProvider, _FakeMessages]:
+    provider = AnthropicProvider(api_key="sk-ant-not-a-real-key")
+    fake = _FakeMessages()
+    provider.client = SimpleNamespace(messages=fake)
+    return provider, fake
+
+
+def test_claude_omits_system_entirely_when_none():
+    """The regression. `system` must not appear in the request at all - an
+    explicit None serialises to `"system": null`, which the API rejects."""
+    provider, fake = _claude_with_fake_client()
+    reply = provider.generate(messages=[{"role": "user", "content": "Reply OK"}])
+    assert "system" not in fake.captured
+    assert reply == "OK"
+
+
+def test_claude_sends_system_when_given():
+    provider, fake = _claude_with_fake_client()
+    provider.generate(messages=[{"role": "user", "content": "hi"}], system="Be terse.")
+    assert fake.captured["system"] == "Be terse."
+
+
+def test_claude_json_mode_without_system_sends_a_string_not_none():
+    """json_mode builds a system prompt out of nothing. Guard against that
+    concatenation ever yielding None and reintroducing the same 400."""
+    provider, fake = _claude_with_fake_client()
+    provider.generate(messages=[{"role": "user", "content": "hi"}], json_mode=True)
+    assert isinstance(fake.captured["system"], str)
+    assert "JSON" in fake.captured["system"]
+
+
+def test_claude_json_mode_keeps_the_caller_system_prompt():
+    provider, fake = _claude_with_fake_client()
+    provider.generate(
+        messages=[{"role": "user", "content": "hi"}],
+        system="You price fights.",
+        json_mode=True,
+    )
+    assert fake.captured["system"].startswith("You price fights.")
+
+
+@responses.activate
+def test_ollama_sends_no_system_message_when_none():
+    """Same contract for the default provider: no system prompt means no system
+    turn in the payload, not a turn whose content is null."""
+    responses.add(
+        responses.POST,
+        "http://localhost:11434/api/chat",
+        json={"message": {"content": "OK"}},
+        status=200,
+    )
+    provider = OllamaProvider(base_url="http://localhost:11434", model="llama3.1")
+    provider.generate(messages=[{"role": "user", "content": "hi"}])
+    sent = json.loads(responses.calls[0].request.body)
+    assert [m["role"] for m in sent["messages"]] == ["user"]

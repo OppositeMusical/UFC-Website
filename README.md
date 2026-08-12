@@ -75,7 +75,7 @@ cd frontend ; npm test
 cd desktop   ; npm test          # packaging whitelist + updater error mapping
 ```
 
-**242 tests** — 169 backend, 42 frontend, 31 desktop. No network calls: the
+**247 tests** — 174 backend, 42 frontend, 31 desktop. No network calls: the
 scraper, AI providers and update checks are all exercised against mocked HTTP.
 
 The desktop suite is small but load-bearing. It asserts that every root `.js`

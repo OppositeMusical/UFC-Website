@@ -351,7 +351,7 @@ class AIProvider(ABC):
 - `OllamaProvider` — `http://localhost:11434/api/chat` and `/api/tags`; no key required; raises a clear "Ollama not running" error if connection is refused.
 - `OpenAICompatibleProvider` — shared base for `OpenAIProvider` (`base_url=https://api.openai.com/v1`) and `DeepseekProvider` (`base_url=https://api.deepseek.com`), since Deepseek's API is OpenAI-compatible.
 - `GeminiProvider` — Google's Generative AI SDK.
-- `AnthropicProvider` — the `anthropic` SDK.
+- `AnthropicProvider` — the `anthropic` SDK. **`system` is omitted from the request entirely when there is no system prompt.** An explicit `system=None` is not the SDK's "not given" sentinel: it serialises to `"system": null`, and the API rejects that with `400 ... system: Input should be a valid array`. Only Test Connection calls `generate()` without a system prompt, so from v0.5.x through v0.6.0 a valid Claude key failed at exactly the moment a user first tried it, while chat and the prediction pages — which always pass a system prompt — would have worked. Fixed in v0.6.1; `tests/test_ai_providers.py` asserts on the *outgoing request*, since a provider that sends `system=None` still returns a reply against a fake client and would pass any assertion made on the response.
 - `factory.get_active_provider()` reads `app_settings.active_provider`, resolves the relevant key through `secret_manager`, and constructs the provider instance.
 
 ## 8. Chat Retrieval Design
@@ -520,7 +520,7 @@ backend/        Flask app + scraper + RAG. The application itself.
                   No release number of its own (only a "0.0.0-dev" sentinel).
   pyinstaller/  app.spec
   scripts/      scrape.py, build_seed_data.py, build_release.py, set_version.py
-  tests/        169 tests, no network
+  tests/        174 tests, no network
 
 desktop/        Electron shell. The shipped product (§2.2).
   main.js       window, menu, lifecycle, update IPC
@@ -786,7 +786,7 @@ page fails safe regardless: it HEAD-checks a relative `downloadUrl` and shows
 - **A machine that has never had Python, Node, or this repo on it.** Everything is bundled and the packaged path is exercised against an empty data directory, but a genuinely clean machine remains the authoritative test.
 - **Signature verification where the certificate is *not* trusted.** The cert is self-signed and imported into Trusted Root on the dev machine. On any other machine `win.verifyUpdateCodeSignature` should *correctly refuse* the update — that refusal path has never been observed on real hardware, and `updater.js::describeError()` exists to explain it if it happens.
 - **Differential updates.** `differentialPackage` is on and blockmaps are published, but every observed update has transferred the full installer.
-- **Paid cloud LLM providers.** No live keys are configured; OpenAI/Gemini/Deepseek/Claude are validated against mocked HTTP/SDK layers only.
+- **Paid cloud LLM providers.** No live keys are configured; OpenAI/Gemini/Deepseek/Claude are validated against mocked HTTP/SDK layers only. **This gap has now cost a release**: the v0.6.1 Claude bug (§7) was invisible to every mock, because a mock accepts `system=None` happily and only the real API rejects it. v0.6.1 narrows the gap rather than closing it — the Claude request body is now asserted at the wire level, by running the real SDK against a local echo server and inspecting the serialised JSON, so a malformed request shape fails a test instead of a user. An authenticated round-trip to `api.anthropic.com` is still unverified. Note that a bogus key cannot substitute: the API returns 401 before it validates the body, so an invalid key masks exactly the class of error this bug belonged to.
 
 ## 15. Open Questions / v2 Ideas
 

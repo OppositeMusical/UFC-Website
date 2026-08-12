@@ -40,6 +40,36 @@ MARKET_PROBABILITY_SYSTEM_PROMPT = (
     "No text outside the JSON object."
 )
 
+FIGHT_MARKET_SYSTEM_PROMPT = (
+    "You are an expert MMA analyst estimating how likely a specific fight "
+    "outcome is, from real career statistics. The question will be about a "
+    "method of victory (KO/TKO, submission, decision or draw), a method "
+    "happening in a particular round, or whether the fight lasts long enough "
+    "to reach a given round. "
+    "Reason from the statistics you are given: finishing rate and knockdown "
+    "average speak to KO/TKO, submission average and takedown volume to "
+    "submissions, and a high average fight time or strong takedown defense "
+    "to fights going long. "
+    "Start from the base rate and let the statistics move you off it, rather "
+    "than reasoning up from zero. Across UFC bouts, roughly half end by "
+    "decision, around 30% by KO/TKO, around 20% by submission, and draws are "
+    "well under 1%. Those cover BOTH fighters, so one named fighter winning "
+    "by a named method is roughly half the figure above before any "
+    "adjustment. Pinning that to one specific round divides it again across "
+    "the rounds in the bout. Most fights reach round 2; fewer reach round 3, "
+    "and so on. "
+    "Adjust from there using the fighters' actual numbers, and keep the "
+    "adjustment proportionate - strong stats justify moving a base rate by "
+    "some margin, not doubling it. Do not inflate a probability because an "
+    "outcome is easy to picture. If the statistics do not support a "
+    "confident answer, stay near the base rate and say so. "
+    "Never state a probability of 0 or 100. "
+    "Respond ONLY with a JSON object of the exact shape: "
+    '{"probability_pct": integer 1-99, "reasoning": "2-4 sentence '
+    'explanation citing specific stats"}. '
+    "No text outside the JSON object."
+)
+
 CHAT_SYSTEM_PROMPT = (
     "You are an MMA analytics assistant. You have access to real career "
     "statistics for UFC fighters when they're mentioned in the conversation "
@@ -67,6 +97,32 @@ def build_prediction_prompt(
         f"{fighter_a_name} stats:\n{fighter_a_context}\n\n"
         f"{fighter_b_name} stats:\n{fighter_b_context}\n\n"
         f"Will {fighter_a_name}'s {stat_category_label} go over or under {line_value}? "
+        "Respond with the JSON object described in your instructions."
+    )
+
+
+def build_fight_market_prompt(
+    *,
+    question: str,
+    fighter_a_name: str,
+    fighter_a_context: str,
+    fighter_b_name: str,
+    fighter_b_context: str,
+) -> str:
+    """A priced fight market, asked as a probability question.
+
+    **The moneyline is deliberately absent.** The caller has it and could
+    include it, but a model told "the book says 60%" will drift toward 60%,
+    and the app's whole output is the gap between the model's number and the
+    book's. Anchoring the model on the price would make that gap a measure of
+    how obediently the model repeats its input. The comparison happens in
+    `services/odds.py::assess()`, after this returns.
+    """
+    return (
+        f"Question: {question}\n\n"
+        f"{fighter_a_name} stats:\n{fighter_a_context}\n\n"
+        f"{fighter_b_name} stats:\n{fighter_b_context}\n\n"
+        "Estimate the probability that this resolves YES. "
         "Respond with the JSON object described in your instructions."
     )
 

@@ -2,23 +2,34 @@ from __future__ import annotations
 
 from flask import Blueprint, abort, jsonify, render_template, request
 
+from app.blueprints.betting.markets import (
+    FIGHT_MARKET_FORMS,
+    FIVE_ROUND_ONLY,
+    InvalidMarket,
+    describe,
+    parse_market,
+)
 from app.blueprints.betting.platforms import get_platform
 from app.extensions import Session
 from app.models.conversation import Conversation
 from app.models.fighter import Fighter
+from app.models.market_prediction import MarketPrediction
 from app.models.message import Message
 from app.models.prediction import Prediction
 from app.services.ai.base import ProviderError
 from app.services.ai.factory import get_active_provider
 from app.services.ai.prompts import (
+    FIGHT_MARKET_SYSTEM_PROMPT,
     MARKET_PROBABILITY_SYSTEM_PROMPT,
     PREDICTION_SYSTEM_PROMPT,
+    build_fight_market_prompt,
     build_market_probability_prompt,
     build_prediction_prompt,
     parse_prediction_response,
     parse_probability_response,
 )
 from app.services.fighter_mentions import build_context_block, find_mentioned_fighters
+from app.services.odds import InvalidMoneyline, assess, parse_moneyline
 from app.services.rag.retrieve import get_context_by_slugs
 
 MAX_QUESTION_CHARS = 500
@@ -61,7 +72,13 @@ def _ask_model(prompt: str, system: str, parse, noun: str):
 @bp.route("/<platform>")
 def form(platform: str):
     config = _platform_or_404(platform)
-    return render_template("betting/form.html", platform=platform, config=config)
+    return render_template(
+        "betting/form.html",
+        platform=platform,
+        config=config,
+        fight_markets=FIGHT_MARKET_FORMS if config.get("supports_fight_markets") else (),
+        five_round_only=FIVE_ROUND_ONLY,
+    )
 
 
 @bp.route("/<platform>/market-probability", methods=["POST"])
@@ -127,6 +144,114 @@ def market_probability(platform: str):
                 "probability_pct": parsed["probability_pct"],
                 "reasoning": parsed["reasoning"],
                 "matched_fighters": [f.name for f in mentioned],
+            }
+        )
+    finally:
+        Session.remove()
+
+
+@bp.route("/<platform>/market", methods=["POST"])
+def fight_market(platform: str):
+    """Prices one of the three moneyline markets (see betting/markets.py).
+
+    The order here matters and is the point of the feature: the model is
+    asked for a probability from the fighters' stats *without being shown the
+    moneyline*, and only then is the price compared against it. Handing the
+    model the odds first would collapse the comparison into a paraphrase of
+    the book - see build_fight_market_prompt.
+    """
+    config = _platform_or_404(platform)
+    if not config.get("supports_fight_markets"):
+        return jsonify({"error": f"{config['display_name']} does not offer moneyline markets"}), 400
+
+    payload = request.get_json(silent=True) or {}
+    fighter_a_id = payload.get("fighter_a_id")
+    fighter_b_id = payload.get("fighter_b_id")
+    if not fighter_a_id or not fighter_b_id:
+        return jsonify({"error": "fighter_a_id and fighter_b_id are required"}), 400
+
+    try:
+        market = parse_market(payload)
+        moneyline = parse_moneyline(payload.get("moneyline"))
+    except (InvalidMarket, InvalidMoneyline) as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    session = Session()
+    try:
+        fighter_a = session.get(Fighter, fighter_a_id)
+        fighter_b = session.get(Fighter, fighter_b_id)
+        if fighter_a is None or fighter_b is None:
+            return jsonify({"error": "unknown fighter_a_id or fighter_b_id"}), 400
+
+        context = get_context_by_slugs([fighter_a.ufc_slug, fighter_b.ufc_slug])
+        question = describe(
+            market_type=market["market_type"],
+            fighter_a_name=fighter_a.name,
+            fighter_b_name=fighter_b.name,
+            method=market["method"],
+            round_number=market["round_number"],
+        )
+        prompt = build_fight_market_prompt(
+            question=question,
+            fighter_a_name=fighter_a.name,
+            fighter_a_context=context.get(fighter_a.ufc_slug, fighter_a.to_summary_text()),
+            fighter_b_name=fighter_b.name,
+            fighter_b_context=context.get(fighter_b.ufc_slug, fighter_b.to_summary_text()),
+        )
+
+        parsed, error = _ask_model(
+            prompt, FIGHT_MARKET_SYSTEM_PROMPT, parse_probability_response, "probability"
+        )
+        if error:
+            return error
+
+        priced = assess(moneyline, parsed["probability_pct"])
+
+        conversation = Conversation(
+            title=f"{config['display_name']}: {question}",
+            platform=platform,
+            fighter_a_id=fighter_a.id,
+            fighter_b_id=fighter_b.id,
+        )
+        session.add(conversation)
+        session.flush()
+
+        session.add(
+            MarketPrediction(
+                conversation_id=conversation.id,
+                platform=platform,
+                fighter_a_id=fighter_a.id,
+                fighter_b_id=fighter_b.id,
+                market_type=market["market_type"].value,
+                victory_method=market["method"].value if market["method"] else None,
+                round_number=market["round_number"],
+                question=question,
+                moneyline=moneyline,
+                model_probability_pct=priced["modelProbabilityPct"],
+                implied_probability_pct=priced["impliedProbabilityPct"],
+                edge_pct=priced["edgePct"],
+                verdict=priced["verdict"],
+                reasoning=parsed["reasoning"],
+            )
+        )
+
+        summary = (
+            f"{question}\n\n"
+            f"Model probability: {priced['modelProbabilityPct']}%. "
+            f"Price {priced['moneyline_display']} implies "
+            f"{priced['impliedProbabilityPct']}%. "
+            f"{priced['verdictLabel']} ({priced['edgePct']:+.1f} points).\n\n"
+            f"{parsed['reasoning']}"
+        )
+        session.add(Message(conversation_id=conversation.id, role="assistant", content=summary))
+        session.commit()
+
+        return jsonify(
+            {
+                "conversation_id": conversation.id,
+                "question": question,
+                "reasoning": parsed["reasoning"],
+                **priced,
             }
         )
     finally:

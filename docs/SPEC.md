@@ -2,7 +2,7 @@
 
 Status: living document. Written before implementation per project
 requirement, and kept current with the shipped code since — **last reconciled
-against the tree at v0.5.7**. Where a decision was later reversed, the
+against the tree at v0.6.0**. Where a decision was later reversed, the
 original reasoning is kept alongside the reversal rather than deleted (see
 §15), because knowing why something *used* to be true is usually what stops
 it being re-litigated.
@@ -177,6 +177,32 @@ predictions
   reasoning             TEXT
   created_at            DATETIME
 
+market_predictions                       -- priced fight markets (§5.2)
+  id                       INTEGER PK
+  conversation_id          INTEGER FK -> conversations.id
+  platform                 TEXT
+  fighter_a_id             INTEGER FK -> fighters.id   -- the fighter the bet names
+  fighter_b_id             INTEGER FK -> fighters.id
+  market_type              TEXT   -- method | method_in_round | round_reached
+  victory_method           TEXT   -- null for round_reached
+  round_number             INTEGER -- null for a plain method bet
+  question                 TEXT   -- the exact wording put to the model
+  moneyline                INTEGER -- American odds, as entered
+  model_probability_pct    INTEGER
+  implied_probability_pct  REAL   -- from the price, margin included
+  edge_pct                 REAL   -- percentage points, model minus implied
+  verdict                  TEXT   -- value | fair | overpriced | implausible
+  reasoning                TEXT
+  created_at               DATETIME
+
+  -- Separate from `predictions` rather than nullable columns bolted onto it.
+  -- A stat prop has a line and an over/under call; a market has a price and a
+  -- probability. `predictions.stat_category`, `line_value` and
+  -- `direction_predicted` are all NOT NULL, and SQLite cannot relax a NOT NULL
+  -- without rebuilding the table - so sharing it would have meant a risky
+  -- migration on every install, or storing a moneyline in a column called
+  -- `line_value`. A new table needs no migration: create_all() makes it.
+
 scrape_checkpoints
   id             INTEGER PK
   fighter_slug   TEXT UNIQUE
@@ -201,6 +227,7 @@ Collection `fighters`:
 | GET | `/api/updates/check[?force=1]` | Compares the installed version against the published manifest. `{status: available\|current\|unknown\|dev\|disabled, currentVersion, latestVersion?, releaseNotes?, downloadPageUrl?}`. Cached 6h; `force=1` bypasses it |
 | GET | `/betting/<platform>` | Renders the shared prediction form for `prizepicks`/`draftkings`/`kalshi`; 404 on unknown platform |
 | POST | `/betting/<platform>/predict` | Body: `{fighter_a_id, fighter_b_id, stat_category, line_value}` → runs RAG+LLM, saves `Prediction` + seeds a `Conversation`, returns `{conversation_id, prediction: {direction, confidence_pct, reasoning}}` |
+| POST | `/betting/<platform>/market` | **DraftKings only** (400 elsewhere). Body: `{fighter_a_id, fighter_b_id, market_type, method?, round_number?, moneyline}` → estimates the outcome's probability from stats, then compares it to the price. Saves a `MarketPrediction` + `Conversation`. Returns `{conversation_id, question, modelProbabilityPct, impliedProbabilityPct, edgePct, verdict, verdictLabel, profitPer100, expectedValuePer100, moneyline_display, reasoning}` — see §5.2 |
 | POST | `/betting/<platform>/market-probability` | **Kalshi only** (400 elsewhere). Body: `{question}` (≤500 chars) → fuzzy-matches any fighters named, injects their stats, returns `{conversation_id, probability_pct, reasoning, matched_fighters}`. Writes a `Conversation` but **no `Prediction`** — see §5.1 |
 | GET | `/chat/` | Full-screen chat. Empty state is a centred composer; no conversation is created until the first message |
 | POST | `/chat/new` | Create an empty conversation |
@@ -223,12 +250,55 @@ of them, and forcing a row in would mean inventing values. The endpoint writes a
 persists and "Continue in Chat" works exactly as it does for a stat prop. The
 tradeoff: market questions don't appear in the dashboard's Recent Predictions.
 
+### 5.2 Priced fight markets (v0.6.0+)
+
+DraftKings lists three markets that take a **moneyline** rather than an
+over/under line, defined in `betting/markets.py`:
+
+| `market_type` | Fields | Question put to the model |
+|---|---|---|
+| `method` | `method` ∈ KO/TKO, Submission, Decision, Draw | "Will A beat B by KO/TKO?" (a draw is phrased as the bout ending in one — naming a winner would be wrong) |
+| `method_in_round` | `method` + `round_number` 1–5 | "Will A beat B by Submission in round 2?" |
+| `round_reached` | `round_number` 2–5 | "Will A vs B reach round 3?" |
+
+They overlap on purpose — a KO in round 2 is also a KO, and also a fight
+reaching round 2 — because a sportsbook prices them separately and the
+interesting question is often whether those prices agree.
+
+Two combinations are refused rather than offered, because they cannot occur:
+
+- **Draw in a round.** A draw is scored after the final round, so it can never
+  land in one. `method_in_round` therefore omits Draw.
+- **Reaching round 1.** Every fight does. `round_reached` starts at 2.
+
+**The model is never shown the moneyline.** This is the rule the whole feature
+rests on. The output is the *gap* between the model's probability and the
+price's; a model told "the book says 27%" drifts toward 27%, and the gap stops
+measuring anything except how obediently it repeats its input. The route
+estimates first (`build_fight_market_prompt`, which has no odds parameter to
+pass) and compares afterwards (`services/odds.py::assess`). A test asserts the
+prompt never contains the price.
+
+**Both verdict bands fail toward silence.** Under 5 points is reported as a
+fair price, because that is inside the error bar of an LLM estimate. **Over 20
+points is reported as "Gap too large to trust"** and the expected-value figure
+is suppressed entirely. A liquid market is not wrong by twenty points; a
+language model asked for a probability routinely is. This was not theoretical —
+during development a local model priced *KO/TKO in round 2* **above** *KO/TKO
+in any round*, which is impossible since one is a subset of the other, and
+without the upper band it would have rendered as a 54-point edge worth chasing.
+
+The implied probability is the raw conversion of the price and therefore
+**includes the sportsbook's margin**. De-vigging needs the opposite side of
+the market, which a single-market form does not have, so the UI says so rather
+than letting a 3-point edge read as free money.
+
 ## 6. Page-by-Page UI Spec
 
 All pages share `base.html` (left nav: Dashboard, PrizePicks, DraftKings, Kalshi, Chat, Settings) and the dark MMA theme (`static/css/theme.css`: near-black background, crimson accent). The nav collapses to a 64px icon rail via a toggle; the state persists in `localStorage` and is applied by an inline `<head>` script **before first paint**, or the sidebar visibly flashes open on every navigation.
 
 - **Dashboard (`/`)**: stat tiles that count up (fighters with stats / fighters known / predictions made), two **measured** status chips (§6.1), a dismissible update banner when a newer release exists (§13), and recent predictions with a "Continue in Chat" link.
-- **PrizePicks / DraftKings / Kalshi (`/betting/<platform>`)**: one shared form — Fighter A and Fighter B (autocomplete, arrow-key navigable), Stat Category (platform-specific subset), Line Value, Submit → shimmer skeletons while waiting, then a result card: an SVG confidence ring that draws while the number counts up in step, the OVER/UNDER call, reasoning, and "Continue in Chat". Platform pages differ only in accent colour and stat categories (`betting/platforms.py::PLATFORM_CONFIG`). **Kalshi additionally** has a free-text market-question card (§5.1): a textarea, a probability ring, and a Leans Yes / Leans No / Toss-up verdict — 45–55% reads as a toss-up, since anything finer is inside the noise of an LLM estimate. It states plainly whether the answer is stat-grounded, because a confident-looking ring on a question naming no known fighter would otherwise read as far more authoritative than it is.
+- **PrizePicks / DraftKings / Kalshi (`/betting/<platform>`)**: the matchup is picked **once** at the top of the page — Fighter A and Fighter B (autocomplete, arrow-key navigable) in their own card, shared by every form below it. It used to live inside the stat-prop form, which was fine while that was the only form; with four on the DraftKings page it would have meant picking the same two fighters four times. Then a Stat Prop card: Stat Category (platform-specific subset), Line Value, Submit → shimmer skeletons while waiting, then a result card with an SVG confidence ring that draws while the number counts up in step, the OVER/UNDER call, reasoning, and "Continue in Chat". Platform pages differ only in accent colour, stat categories, and which extra cards they enable (`betting/platforms.py::PLATFORM_CONFIG`). **DraftKings additionally** renders the three priced markets of §5.2, each its own card: a model / edge / price triptych, a verdict pill, an expected-value line, and a standing note that the implied percentage carries the book's margin. The edge is always signed, and coloured by verdict rather than by sign — green for value, amber for a gap too large to trust, so a miscalibrated estimate never renders as a jackpot. **Kalshi additionally** has a free-text market-question card (§5.1): a textarea, a probability ring, and a Leans Yes / Leans No / Toss-up verdict — 45–55% reads as a toss-up, since anything finer is inside the noise of an LLM estimate. It states plainly whether the answer is stat-grounded, because a confident-looking ring on a question naming no known fighter would otherwise read as far more authoritative than it is.
 - **Chat (`/chat/`)**: full-screen — no page padding, no reading-measure cap, and the transcript is the only thing that scrolls. Two states share **one** composer: an empty conversation centres it under "Where should we begin?" with suggestion rows; sending settles it to the bottom under the thread. Sharing the element means starting a conversation doesn't move focus or discard typed text. Replies reveal progressively (rAF against a token budget, so pacing holds regardless of length), auto-scroll only sticks while already near the bottom, and every assistant message has a hover Copy. The conversation rail has its own independent collapse toggle.
 - **Settings (`/settings/`)**: Provider selector (Ollama / OpenAI / Gemini / Deepseek / Claude) — Ollama shows locally installed models, cloud providers a masked key input; both offer Test Connection. "Fighter Database" panel: Sync Now with a real progress bar (it reads "Discovering the roster…" during the phase where no total exists yet, rather than a misleading 0%). "App Version" panel: installed version, Check for Updates, and release notes.
 
@@ -436,12 +506,12 @@ since style injection cannot execute code.
 ```
 backend/        Flask app + scraper + RAG. The application itself.
   app/
-    blueprints/   main, betting, chat, fighters, settings
+    blueprints/   main, betting (platforms + markets), chat, fighters, settings
     models/       SQLAlchemy: Fighter, Conversation, Message, Prediction,
-                  AppSetting, ScrapeCheckpoint
+                  MarketPrediction, AppSetting, ScrapeCheckpoint
     services/     ai/ (providers, prompts), rag/ (chroma, ingest, retrieve),
                   scraper/ (sitemap, client, parser, pipeline), secrets/,
-                  db/, status.py, updates.py, fighter_mentions.py
+                  db/, status.py, updates.py, odds.py, fighter_mentions.py
     templates/    Jinja: base, index, chat, settings, betting/form
     static/       css/ (theme, chat, betting), js/ (common, chat, betting,
                   settings, status)
@@ -450,7 +520,7 @@ backend/        Flask app + scraper + RAG. The application itself.
                   No release number of its own (only a "0.0.0-dev" sentinel).
   pyinstaller/  app.spec
   scripts/      scrape.py, build_seed_data.py, build_release.py, set_version.py
-  tests/        113 tests, no network
+  tests/        169 tests, no network
 
 desktop/        Electron shell. The shipped product (§2.2).
   main.js       window, menu, lifecycle, update IPC

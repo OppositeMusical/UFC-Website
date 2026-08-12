@@ -56,17 +56,19 @@
   {% if recent_predictions %}
   <table>
     <thead>
-      <tr><th>Platform</th><th>Matchup</th><th>Stat</th><th>Line</th><th>Call</th><th>Confidence</th><th></th></tr>
+      <tr><th>Platform</th><th>Matchup</th><th>Market</th><th>Call</th><th>Model</th><th></th></tr>
     </thead>
     <tbody>
+      {# Stat props and priced markets are flattened into one row shape by
+         main/routes.py::_recent_rows, so this renders both without knowing
+         which is which. #}
       {% for p in recent_predictions %}
       <tr>
         <td>{{ p.platform }}</td>
-        <td>{{ p.fighter_a.name }} vs {{ p.fighter_b.name }}</td>
-        <td>{{ p.stat_category }}</td>
-        <td>{{ p.line_value }}</td>
-        <td><span class="call-pill call-pill--{{ p.direction_predicted }}">{{ p.direction_predicted.upper() }}</span></td>
-        <td>{{ p.confidence_pct }}%</td>
+        <td>{{ p.matchup }}</td>
+        <td>{{ p.market }}</td>
+        <td><span class="call-pill call-pill--{{ p.call_class }}">{{ p.call }}</span></td>
+        <td>{{ p.figure }}</td>
         <td>{% if p.conversation_id %}<a href="{{ url_for('chat.view_conversation', conversation_id=p.conversation_id) }}">Continue in Chat</a>{% endif %}</td>
       </tr>
       {% endfor %}

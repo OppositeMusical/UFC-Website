@@ -974,6 +974,29 @@ tbody tr:nth-child(5) { animation-delay: 0.25s; }
   background: rgba(224, 38, 59, 0.14);
   border: 1px solid rgba(224, 38, 59, 0.4);
 }
+/* Priced-market rows carry a moneyline instead of an over/under call, tinted
+   by the verdict rather than by the sign of the price - a favourite is not
+   automatically a good bet. Values come from services/odds.py::assess. */
+.call-pill--value {
+  color: var(--green);
+  background: rgba(46, 204, 113, 0.14);
+  border: 1px solid rgba(46, 204, 113, 0.4);
+}
+.call-pill--overpriced {
+  color: var(--accent-crimson);
+  background: rgba(224, 38, 59, 0.14);
+  border: 1px solid rgba(224, 38, 59, 0.4);
+}
+.call-pill--fair {
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+}
+.call-pill--implausible {
+  color: var(--amber);
+  background: rgba(224, 167, 46, 0.14);
+  border: 1px solid rgba(224, 167, 46, 0.4);
+}
 
 /* ---------- Accessibility ----------
    A hard stop, not a softening. Vestibular triggers come from movement, so

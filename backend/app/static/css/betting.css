@@ -301,6 +301,117 @@
   80% { transform: translateX(2px); }
 }
 
+/* ---------- Priced fight markets (DraftKings) ---------- */
+.matchup-card .vs-row {
+  margin: 0;
+}
+
+.market-question {
+  margin: 0 0 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Model | edge | price, in that reading order: the user's own number is on
+   the right, so the eye lands on the model's estimate first and the gap
+   between them is literally in the middle. */
+.odds-compare {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 0.5rem;
+  border-radius: var(--radius);
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border-subtle);
+}
+.odds-figure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.odds-figure__value {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.odds-figure__label {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.odds-figure--gap {
+  padding: 0 1rem;
+  border-left: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+}
+
+/* Colour follows the verdict, never the sign alone - a +2 point gap is
+   inside the noise of an LLM estimate and must not render as green. */
+.odds-figure__value.value { color: var(--green); }
+.odds-figure__value.overpriced { color: var(--accent-crimson); }
+.odds-figure__value.fair { color: var(--text-muted); }
+/* Amber, not green: a twenty-point disagreement with a liquid market is a
+   warning about the estimate, not a bigger win. */
+.odds-figure__value.implausible { color: var(--amber); }
+
+.odds-verdict {
+  display: inline-block;
+  margin-top: 0.9rem;
+  padding: 0.34rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+}
+.odds-verdict.value {
+  color: var(--green);
+  border-color: rgba(46, 204, 113, 0.45);
+}
+.odds-verdict.overpriced {
+  color: var(--accent-crimson);
+  border-color: rgba(224, 38, 59, 0.5);
+}
+.odds-verdict.implausible {
+  color: var(--amber);
+  border-color: rgba(224, 167, 46, 0.5);
+}
+
+.odds-ev {
+  margin: 0.75rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.odds-caveat {
+  margin: 0.9rem 0 1.1rem;
+  padding-left: 0.7rem;
+  border-left: 2px solid var(--border-subtle);
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: var(--text-faint);
+  max-width: 60ch;
+}
+
+@media (max-width: 560px) {
+  .odds-compare {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  .odds-figure--gap {
+    padding: 1rem 0;
+    border-left: none;
+    border-right: none;
+    border-top: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .platform-badge,
   .skeleton-line {

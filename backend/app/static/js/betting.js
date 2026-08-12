@@ -6,7 +6,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const fighterAId = document.getElementById("fighter-a-id");
   const fighterBId = document.getElementById("fighter-b-id");
-  const vsRow = formEl.querySelector(".vs-row");
+  // The matchup lives in its own card above the forms and is shared by all
+  // of them, so listeners bind to that card rather than to any one form.
+  const matchupCard = document.getElementById("matchup-card");
+  const vsRow = matchupCard.querySelector(".vs-row");
 
   attachAutocomplete(document.getElementById("fighter-a-input"), document.getElementById("fighter-a-results"), fighterAId);
   attachAutocomplete(document.getElementById("fighter-b-input"), document.getElementById("fighter-b-results"), fighterBId);
@@ -17,10 +20,14 @@ document.addEventListener("DOMContentLoaded", () => {
   function refreshReadyState() {
     vsRow.classList.toggle("is-ready", Boolean(fighterAId.value && fighterBId.value));
   }
-  formEl.addEventListener("input", refreshReadyState);
+  matchupCard.addEventListener("input", refreshReadyState);
   // Picking from the dropdown emits a custom event rather than a native
   // "input" one - see the note in common.js::select().
-  formEl.addEventListener("autocomplete:select", refreshReadyState);
+  matchupCard.addEventListener("autocomplete:select", refreshReadyState);
+
+  function bothFightersPicked() {
+    return Boolean(fighterAId.value && fighterBId.value);
+  }
 
   const resultEl = document.getElementById("prediction-result");
   const loadingEl = document.getElementById("prediction-loading");
@@ -35,7 +42,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const statCategory = document.getElementById("stat-category").value;
     const lineValue = document.getElementById("line-value").value;
 
-    if (!fighterAId.value || !fighterBId.value) {
+    if (!bothFightersPicked()) {
       showError("Pick both fighters from the autocomplete dropdown.");
       return;
     }
@@ -130,6 +137,107 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     requestAnimationFrame(tick);
   }
+
+  // ---- Priced fight markets (DraftKings) --------------------------------
+  //
+  // Every card is wired the same way and differs only in which fields the
+  // server rendered into it, so this reads the fields present rather than
+  // knowing anything about the three market types.
+  document.querySelectorAll(".market-card").forEach((card) => {
+    const marketType = card.dataset.marketType;
+    const form = card.querySelector(".market-form");
+    const pick = (role) => card.querySelector(`[data-role="${role}"]`);
+    const field = (name) => card.querySelector(`[data-field="${name}"]`);
+
+    const btn = pick("submit");
+    const errorBox = pick("error");
+    const loading = pick("loading");
+    const result = pick("result");
+
+    form.addEventListener("submit", async (evt) => {
+      evt.preventDefault();
+      errorBox.classList.remove("visible");
+      result.classList.remove("visible");
+
+      if (!bothFightersPicked()) {
+        showCardError("Pick both fighters at the top of the page first.");
+        return;
+      }
+      const moneyline = field("moneyline").value.trim();
+      if (!moneyline) {
+        showCardError("Enter the moneyline the sportsbook is offering.");
+        return;
+      }
+
+      const body = {
+        fighter_a_id: Number(fighterAId.value),
+        fighter_b_id: Number(fighterBId.value),
+        market_type: marketType,
+        moneyline,
+      };
+      if (field("method")) body.method = field("method").value;
+      if (field("round")) body.round_number = Number(field("round").value);
+
+      setCardLoading(true);
+      try {
+        renderMarketOdds(await apiFetch(`/betting/${platform}/market`, {
+          method: "POST",
+          body: JSON.stringify(body),
+        }));
+      } catch (e) {
+        showCardError(e.message);
+      } finally {
+        setCardLoading(false);
+      }
+    });
+
+    function setCardLoading(on) {
+      btn.disabled = on;
+      loading.classList.toggle("visible", on);
+      btn.innerHTML = on ? '<span class="btn__spinner"></span> Pricing...' : "Price This Market";
+    }
+
+    function showCardError(message) {
+      errorBox.textContent = message;
+      errorBox.classList.remove("visible");
+      void errorBox.offsetWidth;
+      errorBox.classList.add("visible");
+    }
+
+    function renderMarketOdds(data) {
+      pick("question").textContent = data.question;
+      pick("model-pct").textContent = `${data.modelProbabilityPct}%`;
+      pick("implied-pct").textContent = `${data.impliedProbabilityPct}%`;
+
+      // Always signed: the sign is the entire message, and "+4.0" versus
+      // "4.0" is the difference between an edge and an unreadable number.
+      const edge = pick("edge");
+      edge.textContent = `${data.edgePct > 0 ? "+" : ""}${data.edgePct.toFixed(1)}`;
+      edge.className = `odds-figure__value ${data.verdict}`;
+
+      const verdict = pick("verdict");
+      verdict.textContent = data.verdictLabel;
+      verdict.className = `odds-verdict ${data.verdict}`;
+
+      const ev = data.expectedValuePer100;
+      pick("ev").textContent =
+        data.verdict === "implausible"
+          // Suppress the expected-value figure entirely here. A gap this
+          // wide almost always means the estimate is wrong, and rendering
+          // "+180 expected" beside it would be the single most misleading
+          // thing on the page.
+          ? `The model and the ${data.moneyline_display} price disagree by ${Math.abs(data.edgePct).toFixed(1)} points. ` +
+            "A liquid market is rarely wrong by that much, so treat this as the model mis-estimating " +
+            "rather than as an opportunity — a stronger AI provider usually narrows it."
+          : `At ${data.moneyline_display}, a 100 stake returns ${data.profitPer100.toFixed(2)} profit if it lands. ` +
+            `Against the model's ${data.modelProbabilityPct}% that is ${ev >= 0 ? "+" : ""}${ev.toFixed(2)} expected — ` +
+            "only as good as the estimate behind it.";
+
+      pick("reasoning").textContent = data.reasoning;
+      pick("continue").href = `/chat/${data.conversation_id}`;
+      result.classList.add("visible");
+    }
+  });
 
   // ---- Kalshi free-text market question (only rendered on that page) ----
   const marketForm = document.getElementById("market-form");

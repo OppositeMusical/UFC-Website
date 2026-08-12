@@ -46,6 +46,11 @@ PLATFORM_CONFIG = {
             StatCategory.TAKEDOWN_ACCURACY,
             StatCategory.CONTROL_TIME,
         ],
+        # DraftKings lists priced fight markets alongside stat props: method
+        # of victory, method in a given round, and whether the fight reaches
+        # a round. Those take a moneyline rather than an over/under line, so
+        # they get their own form and endpoint - see betting/markets.py.
+        "supports_fight_markets": True,
     },
     "kalshi": {
         "display_name": "Kalshi",

@@ -5,6 +5,7 @@ An MMA-themed product in three parts:
 | Directory | What it is |
 |---|---|
 | **`backend/`** | The application: Python/Flask, serving its own UI (Jinja + vanilla JS). Local (Ollama) or cloud AI (OpenAI, Gemini, Deepseek, Claude), PrizePicks/DraftKings/Kalshi prediction pages, a chatbot, and a ChromaDB RAG layer over real UFC fighter stats. |
+| | DraftKings also prices three **moneyline markets** — method of victory, method in a given round, and whether the fight reaches a round. See [Pricing a market](#pricing-a-market). |
 | **`desktop/`** | The Electron shell that ships it as a Windows desktop app. Spawns the backend as a child process and renders its UI in a native window. **This is the shipped product.** |
 | **`frontend/`** | A static marketing site (React + Vite) that explains the product and serves the installer. |
 
@@ -74,7 +75,7 @@ cd frontend ; npm test
 cd desktop   ; npm test          # packaging whitelist + updater error mapping
 ```
 
-**186 tests** — 113 backend, 42 frontend, 31 desktop. No network calls: the
+**242 tests** — 169 backend, 42 frontend, 31 desktop. No network calls: the
 scraper, AI providers and update checks are all exercised against mocked HTTP.
 
 The desktop suite is small but load-bearing. It asserts that every root `.js`
@@ -96,7 +97,7 @@ $bstr  = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
 $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
 [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
 
-python ..\backend\scripts\set_version.py 0.5.7      # 1. bump desktop/package.json
+python ..\backend\scripts\set_version.py 0.6.0       # 1. bump desktop/package.json
 cd ..\backend ; pyinstaller pyinstaller/app.spec    # 2. Python bundle
 cd ..\desktop ; .\scripts\sign-backend.ps1 -Password $plain   # 3. sign the backend exe
 $env:CSC_KEY_PASSWORD = $plain ; npm run dist       # 4. wrap (2) -> signed installer + zip
@@ -188,6 +189,48 @@ Three cache policies and an SPA fallback, all of which matter:
 The fighter-stats scraper targets `ufc.com` — the UFC's own official site — and
 honours its stated `crawl-delay: 15`. UFCStats.com and ESPN were both evaluated
 and deliberately ruled out; see §2.1 of the spec for why.
+
+## Pricing a market
+
+The DraftKings page carries three markets that take a **moneyline** instead of
+an over/under line:
+
+| Market | You choose | Example |
+|---|---|---|
+| Method of Victory | KO/TKO, Submission, Decision or Draw | *Will A beat B by KO/TKO?* |
+| Method of Victory in a Round | method + round 1–5 | *…by Submission in round 2?* |
+| Fight Reaches a Round | round 2–5 | *Will A vs B reach round 3?* |
+
+Pick the matchup once at the top of the page, then paste the price the
+sportsbook is offering. The app converts that price into the probability it
+implies, and reports the gap against the model's own estimate.
+
+**The model never sees your moneyline.** That is the whole point — the output
+is the disagreement between the model and the price, and a model told what the
+book thinks drifts toward it, leaving a "gap" that only measures how well it
+echoes its input. It estimates from fighter stats alone; the comparison happens
+afterwards, in code.
+
+Two combinations are refused because they cannot happen: a **draw in a round**
+(a draw is scored after the final round) and **reaching round 1** (every fight
+does).
+
+### Read the verdict, not the number
+
+- **Under 5 points** → *"Roughly a fair price."* Inside the error bar of an LLM
+  estimate.
+- **5–20 points** → *"Model sees value"* or *"Priced above the model."*
+- **Over 20 points** → *"Gap too large to trust,"* in amber, with the
+  expected-value figure suppressed. A liquid market is not wrong by twenty
+  points; a language model asked for a probability routinely is. While building
+  this, a small local model priced *KO/TKO in round 2* **above** *KO/TKO in any
+  round* — impossible, since one is a subset of the other — and without this
+  band it would have rendered as a 54-point edge worth chasing.
+
+Estimate quality tracks the provider: a small local model produces wide,
+sometimes incoherent numbers. The implied percentage also includes the book's
+margin, which cannot be removed without the other side of the market, so a
+small edge is not necessarily an edge at all. None of this is betting advice.
 
 ## Updating
 

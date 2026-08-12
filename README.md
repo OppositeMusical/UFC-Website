@@ -31,7 +31,7 @@ server.
 
 1. New Railway project → **Deploy from GitHub repo**.
 2. In the service's **Settings → Root Directory**, set `frontend`. Railway then
-   finds `package.json` and `railway.json`, and Nixpacks detects Node.
+   finds `package.json` and `railway.json`, and Railpack detects Node.
 3. Deploy. It runs `npm ci && npm run build`, then `npm start`.
 
 Railway injects `PORT`; the server binds it on `0.0.0.0` and answers

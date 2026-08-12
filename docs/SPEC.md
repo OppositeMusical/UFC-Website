@@ -1,6 +1,11 @@
 # MMA AI Predictor — Product & Technical Spec
 
-Status: v1 spec, written before implementation per project requirement.
+Status: living document. Written before implementation per project
+requirement, and kept current with the shipped code since — **last reconciled
+against the tree at v0.5.7**. Where a decision was later reversed, the
+original reasoning is kept alongside the reversal rather than deleted (see
+§15), because knowing why something *used* to be true is usually what stops
+it being re-litigated.
 
 ## 1. Overview & Goals
 
@@ -21,18 +26,18 @@ Two decoupled deliverables:
 │ Static marketing site    │        │                                                │
 │  - Home                  │        │  ┌──────────────────────────────────────────┐  │
 │  - Download              │        │  │ desktop/  Electron shell                 │  │
-│  - About (placeholder)   │        │  │   main.js    window, menu, lifecycle     │  │
+│  - About the developer   │        │  │   main.js    window, menu, lifecycle     │  │
 │                          │        │  │   backend.js spawn + /health + teardown  │  │
 │  Serves:                 │download│  └───────────────┬──────────────────────────┘  │
 │   version.json ──────────┼───────▶│      spawns      │      loads http://127.0.0.1 │
-│   the portable zip       │        │                  ▼                             │
+│   installer + zip        │        │                  ▼                             │
 │                          │        │  ┌──────────────────────────────────────────┐  │
 │                          │        │  │ backend/  waitress → Flask               │  │
 │  version.json is ALSO    │        │  │   Jinja UI + JSON API (§5)               │  │
-│  the update manifest ◀───┼────────┼──┤   polled ≤6h for a newer release         │  │
+│  the update manifest ◀───┼────────┼──┤   update check (§13.2)                   │  │
 │  installed copies poll   │        │  └──────────────────────────────────────────┘  │
 └──────────────────────────┘        │                                                │
-                                    │  Data in <app folder>\data\ (portable, §13.1) │
+                                    │  Data: user profile, or data\ beside exe       │
                                     │   SQLite + ChromaDB (seeded on first launch)   │
                                     │                                                │
                                     │  ┌─────────────┐  ┌────────────────────────┐   │
@@ -140,7 +145,7 @@ fighters
 
 app_settings
   id           INTEGER PK
-  key          TEXT UNIQUE NOT NULL   -- active_provider | active_ollama_model | schema_version | last_fighter_sync_at
+  key          TEXT UNIQUE NOT NULL   -- active_provider | active_ollama_model | schema_version
   value        TEXT
   updated_at   DATETIME
 
@@ -233,12 +238,22 @@ Both dashboard chips derive from reality (`app/services/status.py`), which is a
 deliberate correction of an earlier design where they were decorative:
 
 - **Fighter database** — counts and freshness straight from the `fighters`
-  table, keyed on `max(stats_scraped_at)`. It must **not** key on the
-  `last_fighter_sync_at` setting: a seeded install has real per-fighter scrape
-  timestamps but no sync setting, so that version told every new user their
-  database was empty while they sat on a full roster, and pushed them toward a
-  ~28h scrape they didn't need. Green when stats exist, amber past 30 days
-  (matching the point a sync would actually re-fetch), red when nothing usable.
+  table, keyed on `max(stats_scraped_at)`. It must **not** key on a
+  `last_fighter_sync_at` setting, which only a manual sync ever wrote: a seeded
+  install has real per-fighter scrape timestamps but no such setting, so that
+  version told every new user their database was empty while they sat on a full
+  roster, and pushed them toward a ~28h scrape they didn't need. Green when
+  stats exist, amber past 30 days (matching the point a sync would actually
+  re-fetch), red when nothing usable.
+
+  The **Settings → Fighter Database** card was left on the setting when the
+  chips were fixed, so until **v0.5.4** the two surfaces contradicted each
+  other over the same table — the wrong one sitting directly above the button
+  that starts the scrape. Both now share `fighter_db_status()`, and the card
+  additionally reports what a sync would actually fetch (how many fighters are
+  known by name and record but carry no stats yet). The setting itself was
+  deleted in **v0.5.5**, once nothing read it; rows left in existing databases
+  are simply never consulted.
 - **AI provider** — a live check: is the Ollama daemon answering and does it
   have the selected model pulled, or is a key actually in the keyring? Neither
   spends tokens; Test Connection is the deliberate, user-initiated version.
@@ -303,15 +318,17 @@ app ships with a pre-scraped snapshot bundled directly into the executable:
 - **`app/utils/seed.py::maybe_seed_data_dir()`** runs once at app startup,
   *before* `init_engine()`/`init_db()` ever touch the sqlite file (ordering
   matters — see the module docstring). If the user's real data directory
-  (`%LOCALAPPDATA%\UFCPredictor\`) has no database yet, it copies the
+  (whichever of the three in §11 applies) has no database yet, it copies the
   bundled seed in; if a database already exists (any prior run, including
   one the user has since synced further), it is **never** overwritten.
   Skipped entirely under `TestConfig` so unit tests stay fast/isolated.
-- Because the seed file is a real, fully-initialized app database, the
-  `last_fighter_sync_at` setting baked into it carries forward automatically
-  once copied — the Dashboard/Settings pages correctly show *when the
-  bundled snapshot was captured*, not a fake "just synced" timestamp. This
-  is what tells a user it's time for an occasional refresh.
+- Because the seed file is a real, fully-initialized app database, every
+  fighter row carries the `stats_scraped_at` it was scraped with. The
+  Dashboard chip and the Settings card both read `max(stats_scraped_at)`, so a
+  fresh install correctly reports *when the bundled snapshot was captured*
+  rather than a fake "just synced" timestamp — which is what tells a user it's
+  time for an occasional refresh. (Freshness deliberately comes from the data,
+  not from a setting; see §6.1 for the bug that taught us this.)
 - Users can still pull current data anytime via Settings → Sync Now (or
   `scripts/scrape.py`) — bundling a seed only removes the *first-run* wait,
   it doesn't replace the normal sync mechanism or make the data "final."
@@ -364,7 +381,10 @@ vectors).
   this was finally found: running from the virtualenv works, so the bug is
   only visible by probing the frozen exe.
 - No telemetry, no external data collection beyond the user's own configured AI provider calls and the user-initiated `ufc.com` scrape.
-- All app data (SQLite DB, Chroma persistent directory, Fernet fallback key file) lives under `%LOCALAPPDATA%\UFCPredictor\`, never inside the installed program directory (which may be read-only).
+- All app data (SQLite DB, Chroma persistent directory, Fernet fallback key file) lives in a per-user directory, **never** inside the installed program directory — which may be read-only, and which the NSIS updater replaces wholesale on every update. Which directory depends on how the app was started, and Electron passes the answer down as `UFC_PREDICTOR_DATA_DIR` (§13.1):
+  - **Installed build** → the Electron user-data directory (`%APPDATA%\MMA Assist\` on Windows). Survives updates *and* uninstalls, since `deleteAppDataOnUninstall` is false.
+  - **Portable build** → `data\` beside the exe, so the whole folder stays movable.
+  - **Backend run standalone** (dev, no Electron) → `%LOCALAPPDATA%\UFCPredictor\`, from `platformdirs`. This is the only case the bare `Config.data_dir()` default applies to.
 
 ### 11.1 Loopback server hardening (`app/security.py`)
 
@@ -430,15 +450,25 @@ backend/        Flask app + scraper + RAG. The application itself.
                   No release number of its own (only a "0.0.0-dev" sentinel).
   pyinstaller/  app.spec
   scripts/      scrape.py, build_seed_data.py, build_release.py, set_version.py
-  tests/        84 tests, no network
+  tests/        113 tests, no network
 
 desktop/        Electron shell. The shipped product (§2.2).
-  main.js, backend.js, preload.js, splash.html, package.json (version source)
+  main.js       window, menu, lifecycle, update IPC
+  backend.js    spawn + /health + data-dir resolution + teardown
+  updater.js    electron-updater wrapper (§13.2)
+  datamigrate.js  one-time portable -> installed data import (§13.1)
+  preload.js    argument-free update bridge (§13.2)
+  splash.html, package.json (version source)
+  build/        icon.ico
+  certs/        code-signing.pfx + DPAPI-encrypted password (gitignored)
+  scripts/      sign-backend, new-signing-cert, trust-cert, make-icon
+  tests/        31 tests (packaging whitelist, updater error mapping)
 
 frontend/       React + Vite marketing site.
   src/{pages,components,hooks,styles}
+  src/lib/      versionJson.ts — shared manifest types + fetch hook
   public/       version.json (download + update manifest), downloads/ (gitignored)
-  tests/        13 tests
+  tests/        42 tests
 
 docs/SPEC.md    This file.
 ```
@@ -487,9 +517,19 @@ input** — skipping a step ships a mismatched build rather than failing:
 1. Ensure `requirements.txt` is installed in the build environment.
 2. **Mandatory pre-bundle step**: run the app once with network access so ChromaDB's default embedding function downloads its ONNX model cache; then include that cache directory in the PyInstaller `datas` so a packaged, possibly-offline install doesn't silently fail to embed on first use.
 3. **Bake the seed database** per §10 (`build_seed_data.py`) so `app/seed_data/` has real content before the next step — PyInstaller's `datas` entry for it must point at an existing directory.
-4. `pyinstaller backend/pyinstaller/app.spec` → `backend/dist/UFCPredictor/` (onedir, contains `UFCPredictor.exe`).
-5. `cd desktop && npm run dist` → copies step 4's folder in as `resources/backend` and emits `desktop/release/UFC Predictor-<version>-win.zip` (portable, ~230MB; ~630MB extracted).
-6. `python backend/scripts/build_release.py` → copies step 5's zip into `frontend/public/downloads/` and regenerates `version.json` (URL, size, SHA-256) — this is what the landing page's Download button serves.
+4. `python backend/scripts/set_version.py <x.y.z>` → bumps `desktop/package.json`, the single source of truth for the version (§4 of `desktop/README.md`).
+5. `pyinstaller backend/pyinstaller/app.spec` → `backend/dist/UFCPredictor/` (onedir, contains `UFCPredictor.exe`).
+6. **`desktop/scripts/sign-backend.ps1 -Password <pfx>`** → signs step 5's `UFCPredictor.exe`. Must run **before** step 7: electron-builder copies that binary in as a resource, so signing it afterwards leaves the copy inside the installer unsigned. The script has its own freshness guard against a stale bundle.
+7. `$env:CSC_KEY_PASSWORD = <pfx>` then `cd desktop && npm run dist` → copies step 5's folder in as `resources/backend` and emits **both** Windows artifacts (§13.1): `MMA Assist-<version>-setup-x64.exe` (NSIS, signed) and `MMA Assist-<version>-win.zip` (portable, ~230MB; ~630MB extracted), plus `latest.yml` and a `.blockmap`.
+8. `python backend/scripts/build_release.py --github-release OWNER/REPO --notes "..."` → renames step 7's artifacts to their published names, copies them plus `latest.yml` and the matching blockmap into `frontend/public/downloads/`, and regenerates `version.json` (URL, size, SHA-256, notes).
+9. Create the GitHub release and upload all four files. **Publish it as a draft first, upload, then un-draft** — an empty release at `releases/latest` makes every installed copy's update check 404 for the duration of the upload.
+
+> **Forgetting `CSC_KEY_PASSWORD` does not fail early.** The build runs for
+> several minutes and then dies on `SignTool Error: The specified PFX password
+> is not correct`, which reads like a corrupt certificate rather than an unset
+> variable. The password is stored DPAPI-encrypted at
+> `desktop/certs/pfx-password.dpapi`; `desktop/README.md` has the recovery
+> snippet for both steps.
 
 > **Rebuild step 4 whenever `backend/` changes.** electron-builder copies
 > `backend/dist/UFCPredictor` in verbatim; it cannot tell the Python source
@@ -504,7 +544,7 @@ From **v0.5.0** Windows ships both, from one `npm run dist`:
 
 | Artifact | Data location | In-app update |
 |---|---|---|
-| `MMA-Assist-<v>-setup-win64.exe` (NSIS, **primary**) | user profile | **Yes** — see 13.2 |
+| `MMA-Assist-<v>-setup-x64.exe` (NSIS, **primary**) | user profile | **Yes** — see 13.2 |
 | `MMA-Assist-<v>-portable-win64.zip` | `data/` beside the exe | No — download and replace |
 
 The installer is primary because **electron-updater only supports NSIS on
@@ -662,23 +702,33 @@ release host and repoint the manifest
 page fails safe regardless: it HEAD-checks a relative `downloadUrl` and shows
 "Build not available yet" instead of a button that 404s.
 
-## 14. Explicitly Out of Scope for the Initial Build Session
+## 14. What Has and Hasn't Been Verified
 
-- Running a real **signed** installer end-to-end. The unsigned NSIS installer and the packaged Electron app have both been built and launched, and confirmed to spawn the bundled backend, seed a fresh data directory, serve every page and shut down without orphaning the Python process — but signing (and therefore a SmartScreen-free first run) is untested.
-- Installing on a machine that has never had Python, Node, or this repo on it. Everything is bundled and the packaged path was exercised against an empty data directory, but a genuinely clean machine remains the authoritative test.
-- Making real calls to any paid cloud LLM provider (no live API keys are configured in the dev environment) — provider code is validated with mocked HTTP/SDK layers. Ollama, if the user has it installed, is exercised for real.
-- A full multi-thousand-fighter live scrape was in fact run against ufc.com (see §10) to bake the bundled seed data — this is no longer out of scope, it's how the shipped database was produced.
+**Verified end to end** (as of v0.5.7):
+
+- **A real signed build.** Every shipped artifact since v0.5.0 is Authenticode-signed with SHA-256 and an RFC3161 timestamp, and `signtool verify /pa` passes.
+- **A real in-app update.** Driven for real from 0.5.0 → 0.5.1 and re-checked each release since: the app downloads, verifies the signature, quits, installs silently and relaunches with the user's database, chats and predictions intact.
+- **The packaged app against a live AI provider.** Predictions, Kalshi market questions, chat continuation, fighter autocomplete and the update check are all exercised against a running Ollama on the packaged build before each release — not just against mocks.
+- **A full multi-thousand-fighter live scrape** against ufc.com (§10); it is how the shipped database was produced.
+
+**Still unverified — do not claim otherwise:**
+
+- **A machine that has never had Python, Node, or this repo on it.** Everything is bundled and the packaged path is exercised against an empty data directory, but a genuinely clean machine remains the authoritative test.
+- **Signature verification where the certificate is *not* trusted.** The cert is self-signed and imported into Trusted Root on the dev machine. On any other machine `win.verifyUpdateCodeSignature` should *correctly refuse* the update — that refusal path has never been observed on real hardware, and `updater.js::describeError()` exists to explain it if it happens.
+- **Differential updates.** `differentialPackage` is on and blockmaps are published, but every observed update has transferred the full installer.
+- **Paid cloud LLM providers.** No live keys are configured; OpenAI/Gemini/Deepseek/Claude are validated against mocked HTTP/SDK layers only.
 
 ## 15. Open Questions / v2 Ideas
 
 **Done since first draft** — kept here so the history is legible:
 - ~~Embedded webview instead of the system browser~~ → done, as an Electron shell rather than pywebview (§2.2).
-- ~~Auto-update mechanism~~ → deliberately **not** auto-update. Installed copies check the published manifest and link the user to the download page (§13); silently replacing an executable is a bigger trust ask than this app needs to make.
+- ~~Auto-update mechanism~~ → **reversed and shipped in v0.5.0.** This spec previously argued against it: *"silently replacing an executable is a bigger trust ask than this app needs to make."* The reasoning was sound about *silence*, not about updating — so what shipped keeps the consent and drops the manual download. Nothing is fetched until the user presses Download, nothing installs until they press Restart & Install, and the downloaded installer's signature is verified against the expected publisher before it runs (§13.2).
+- ~~An app icon~~ → done in v0.5.2; generated by `desktop/scripts/make-icon.ps1` into `build/icon.ico`, used for the window, taskbar and installer.
+- ~~Code signing~~ → done in v0.5.0, with the caveat below.
 
 **Still open:**
-- **Code signing.** The single highest-value remaining item: unsigned installers trip SmartScreen, and most users will read that as malware. Needs a purchased certificate.
-- **An app icon.** Currently Electron's default, in the window, taskbar and installer.
-- **macOS/Linux packaging.** The Download page already lists macOS as coming soon. `desktop/backend.js` resolves a POSIX venv path, but PyInstaller must be run on each target OS and none of it is tested there.
+- **A certificate a stranger's machine trusts.** Builds are signed, but with a *self-signed* certificate, so SmartScreen still warns on public downloads and the in-app updater will refuse to install on any machine that hasn't imported the cert. Needs a purchased CA certificate; until then the Download page publishes a SHA-256 and explains the warning.
+- **macOS/Linux packaging.** The Download page already lists macOS as coming soon. `desktop/backend.js` resolves a POSIX venv path and treats darwin as non-portable (§13.1), but PyInstaller must be run on each target OS and none of it is tested there.
 - **Stat-less fighters in autocomplete.** 3,262 of 6,746 roster entries are historical or never-competed profiles ufc.com lists without stats. They're currently selectable, so a user can pick someone the AI has nothing to reason about. Keep them in the database, exclude them from autocomplete.
 - **Retry the 5 checkpointed scrape errors** from the full run (§10); they're marked `error`, so a resync picks up only those.
 - Optional model-driven tool-calling for chat on providers that support it well (OpenAI/Anthropic/Gemini), layered on top of the deterministic fuzzy-match injection rather than replacing it — Ollama must keep working the same way.

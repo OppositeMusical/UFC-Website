@@ -26,11 +26,41 @@ MAX_QUESTION_CHARS = 500
 bp = Blueprint("betting", __name__, url_prefix="/betting")
 
 
-@bp.route("/<platform>")
-def form(platform: str):
+def _platform_or_404(platform: str) -> dict:
     config = get_platform(platform)
     if config is None:
         abort(404)
+    return config
+
+
+def _ask_model(prompt: str, system: str, parse, noun: str):
+    """Runs the active provider in JSON mode and parses the reply.
+
+    Returns (parsed, None) on success, or (None, error_response) for the two
+    failures every betting route handles identically: the provider being
+    unusable, and a reply that doesn't parse. Both are 502s - the request
+    was fine, the AI side wasn't - and `noun` names what the parser was
+    looking for so the message says which route's contract was broken.
+    """
+    try:
+        raw = get_active_provider().generate(
+            messages=[{"role": "user", "content": prompt}],
+            system=system,
+            json_mode=True,
+        )
+        return parse(raw), None
+    except ProviderError as exc:
+        return None, (jsonify({"error": str(exc)}), 502)
+    except ValueError as exc:
+        return None, (
+            jsonify({"error": f"Could not parse a {noun} from the AI response: {exc}"}),
+            502,
+        )
+
+
+@bp.route("/<platform>")
+def form(platform: str):
+    config = _platform_or_404(platform)
     return render_template("betting/form.html", platform=platform, config=config)
 
 
@@ -45,9 +75,7 @@ def market_probability(platform: str):
     assistant message is written instead, so the estimate is saved and
     "Continue in Chat" works exactly as it does for a stat prop.
     """
-    config = get_platform(platform)
-    if config is None:
-        abort(404)
+    config = _platform_or_404(platform)
     if not config.get("supports_market_question"):
         return jsonify({"error": f"{config['display_name']} does not support market questions"}), 400
 
@@ -69,18 +97,11 @@ def market_probability(platform: str):
             fighter_context_block=build_context_block(mentioned),
         )
 
-        try:
-            provider = get_active_provider()
-            raw = provider.generate(
-                messages=[{"role": "user", "content": prompt}],
-                system=MARKET_PROBABILITY_SYSTEM_PROMPT,
-                json_mode=True,
-            )
-            parsed = parse_probability_response(raw)
-        except ProviderError as exc:
-            return jsonify({"error": str(exc)}), 502
-        except ValueError as exc:
-            return jsonify({"error": f"Could not parse a probability from the AI response: {exc}"}), 502
+        parsed, error = _ask_model(
+            prompt, MARKET_PROBABILITY_SYSTEM_PROMPT, parse_probability_response, "probability"
+        )
+        if error:
+            return error
 
         title = question if len(question) <= 60 else question[:57] + "..."
         conversation = Conversation(title=f"Kalshi: {title}", platform=platform)
@@ -114,9 +135,7 @@ def market_probability(platform: str):
 
 @bp.route("/<platform>/predict", methods=["POST"])
 def predict(platform: str):
-    config = get_platform(platform)
-    if config is None:
-        abort(404)
+    config = _platform_or_404(platform)
 
     payload = request.get_json(silent=True) or {}
     fighter_a_id = payload.get("fighter_a_id")
@@ -160,18 +179,9 @@ def predict(platform: str):
             fighter_b_context=fighter_b_context,
         )
 
-        try:
-            provider = get_active_provider()
-            raw = provider.generate(
-                messages=[{"role": "user", "content": prompt}],
-                system=PREDICTION_SYSTEM_PROMPT,
-                json_mode=True,
-            )
-            parsed = parse_prediction_response(raw)
-        except ProviderError as exc:
-            return jsonify({"error": str(exc)}), 502
-        except ValueError as exc:
-            return jsonify({"error": f"Could not parse a prediction from the AI response: {exc}"}), 502
+        parsed, error = _ask_model(prompt, PREDICTION_SYSTEM_PROMPT, parse_prediction_response, "prediction")
+        if error:
+            return error
 
         conversation = Conversation(
             title=f"{config['display_name']}: {fighter_a.name} vs {fighter_b.name}",

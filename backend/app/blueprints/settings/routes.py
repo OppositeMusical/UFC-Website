@@ -1,17 +1,12 @@
 from __future__ import annotations
 
-import datetime as dt
 import threading
 
 from flask import Blueprint, jsonify, render_template, request
 
 from app.config import Config
 from app.extensions import Session
-from app.models.app_setting import (
-    KEY_ACTIVE_OLLAMA_MODEL,
-    KEY_ACTIVE_PROVIDER,
-    KEY_LAST_FIGHTER_SYNC_AT,
-)
+from app.models.app_setting import KEY_ACTIVE_OLLAMA_MODEL, KEY_ACTIVE_PROVIDER
 from app.services.ai.base import ProviderError
 from app.services.ai.factory import PROVIDER_NAMES, build_provider
 from app.services.ai.ollama_provider import OllamaProvider
@@ -98,13 +93,12 @@ def sync_fighters():
         try:
             pipeline.sync_roster()
             pipeline.scrape_details(progress_callback=progress)
-            set_setting(KEY_LAST_FIGHTER_SYNC_AT, dt.datetime.utcnow().isoformat())
         except Exception as exc:  # pragma: no cover - background thread
             _sync_state["last_error"] = str(exc)
         finally:
             _sync_state["running"] = False
             # No teardown_appcontext fires on this thread, so the
-            # thread-local session set_setting() opened has to be released
+            # thread-local session the pipeline opened has to be released
             # here or it holds a sqlite connection for the process lifetime.
             Session.remove()
 

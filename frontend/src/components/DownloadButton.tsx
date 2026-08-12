@@ -1,34 +1,23 @@
 import { useEffect, useState } from "react";
-
-export interface PlatformArtifact {
-  downloadUrl: string;
-  /**
-   * "nsis" = Windows installer (the self-updating channel);
-   * "portable" = Windows zip; "dmg" = macOS disk image.
-   */
-  kind?: string;
-  fileName?: string;
-  sizeBytes?: number;
-  sha256?: string;
-}
-
-interface VersionInfo extends PlatformArtifact {
-  version: string;
-  downloadUrl: string;
-  releasedAt?: string;
-  releaseNotes?: string[];
-  /**
-   * Per-platform artifacts. The Windows entry is ALSO duplicated at the top
-   * level, because installed copies poll this same file for updates and read
-   * downloadUrl/sha256 from the root - moving them would break every client
-   * already shipped.
-   */
-  platforms?: Record<string, PlatformArtifact>;
-}
+import type { ReactNode } from "react";
+import {
+  formatSize,
+  useVersionJson,
+  type PlatformArtifact,
+  type VersionInfo,
+} from "../lib/versionJson";
 
 type Status = "loading" | "ready" | "unavailable";
 
 const RELEASES_URL = "https://github.com/OppositeMusical/UFC-Website/releases";
+
+const DOWNLOAD_ICON = (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 3v12" />
+    <path d="M7 12l5 5 5-5" />
+    <path d="M4 21h16" />
+  </svg>
+);
 
 /**
  * The "no build published" state has two audiences. On a dev machine the
@@ -39,11 +28,6 @@ function isLocalhost(): boolean {
   if (typeof window === "undefined") return false;
   const { hostname } = window.location;
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
-}
-
-function formatSize(bytes?: number): string | null {
-  if (!bytes) return null;
-  return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
 }
 
 /**
@@ -85,11 +69,109 @@ type Transfer =
   | { state: "done"; folder: string }
   | { state: "error"; message: string };
 
+// ---- Blocks shared by the installer and legacy render paths ----------
+
+function VersionLine({ version, sizeBytes }: { version: string; sizeBytes?: number }) {
+  const size = formatSize(sizeBytes);
+  return (
+    <p className="download-card__version">
+      Version {version}
+      {size ? ` · ${size}` : ""} · Windows 10/11 (64-bit)
+    </p>
+  );
+}
+
+function WhatsNew({ info }: { info: VersionInfo }) {
+  if (!info.releaseNotes || info.releaseNotes.length === 0) return null;
+  return (
+    <div className="whats-new">
+      <h3>
+        What's new in {info.version}
+        {info.releasedAt ? <span> · {info.releasedAt}</span> : null}
+      </h3>
+      <ul>
+        {info.releaseNotes.map((note) => (
+          <li key={note}>{note}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function Sha256({ value }: { value?: string }) {
+  if (!value) return null;
+  return (
+    <p className="download-card__hash">
+      <span>SHA-256</span>
+      <code>{value}</code>
+    </p>
+  );
+}
+
+/**
+ * Progress / saved / failed feedback for a folder-picker transfer. Rendered
+ * identically in both places a transfer can happen; `doneSuffix` carries the
+ * one sentence that differs after "run MMA Assist.exe".
+ */
+function TransferStatus({
+  transfer,
+  retryUrl,
+  doneSuffix,
+}: {
+  transfer: Transfer;
+  retryUrl: string;
+  doneSuffix?: ReactNode;
+}) {
+  return (
+    <>
+      {transfer.state === "saving" && (
+        <div className="transfer-bar" role="progressbar" aria-valuenow={transfer.percent} aria-valuemin={0} aria-valuemax={100}>
+          <span className="transfer-bar__fill" style={{ width: `${transfer.percent}%` }} />
+        </div>
+      )}
+      {transfer.state === "done" && (
+        <p className="transfer-note transfer-note--ok">
+          Saved to <strong>{transfer.folder}</strong>. Extract the zip there, then run{" "}
+          <code>MMA Assist.exe</code>
+          {doneSuffix ?? "."}
+        </p>
+      )}
+      {transfer.state === "error" && (
+        <p className="transfer-note transfer-note--err">
+          {transfer.message}{" "}
+          <a href={retryUrl} download>
+            Download normally instead
+          </a>
+          .
+        </p>
+      )}
+    </>
+  );
+}
+
 export default function DownloadButton() {
-  const [info, setInfo] = useState<VersionInfo | null>(null);
+  const { data: info, checked } = useVersionJson();
   const [status, setStatus] = useState<Status>("loading");
   const [transfer, setTransfer] = useState<Transfer>({ state: "idle" });
   const [portableOpen, setPortableOpen] = useState(false);
+
+  useEffect(() => {
+    if (!checked) return;
+    // A downloadUrl still pointing at the placeholder release host is
+    // worse than no button: it looks live and 404s on click.
+    const isReal = Boolean(info?.downloadUrl) && !info!.downloadUrl.includes("your-org");
+    if (!isReal) {
+      setStatus("unavailable");
+      return;
+    }
+    let cancelled = false;
+    assetExists(info!.downloadUrl).then((exists) => {
+      if (!cancelled) setStatus(exists ? "ready" : "unavailable");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [checked, info]);
 
   async function handlePickFolder(artifact: PlatformArtifact) {
     if (!artifact) return;
@@ -145,32 +227,6 @@ export default function DownloadButton() {
     }
   }
 
-  useEffect(() => {
-    let cancelled = false;
-
-    // no-store, because this file is the pointer to the current release.
-    // A cached copy keeps sending people to whatever URL was current when
-    // they last loaded the page - which is exactly how a stale placeholder
-    // survived a rebuild and 404'd on click.
-    fetch("/version.json", { cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
-      .then(async (data: VersionInfo) => {
-        if (cancelled) return;
-        // A downloadUrl still pointing at the placeholder release host is
-        // worse than no button: it looks live and 404s on click.
-        const isReal = Boolean(data?.downloadUrl) && !data.downloadUrl.includes("your-org");
-        setInfo(data);
-        setStatus(isReal && (await assetExists(data.downloadUrl)) ? "ready" : "unavailable");
-      })
-      .catch(() => {
-        if (!cancelled) setStatus("unavailable");
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   if (status === "loading") {
     return (
       <div className="download-cta">
@@ -206,8 +262,6 @@ export default function DownloadButton() {
     );
   }
 
-  const size = formatSize(info.sizeBytes);
-
   // From 0.5.0 the manifest's primary Windows artifact is the NSIS
   // installer, because it is the only Windows target electron-updater can
   // update in place. The portable zip moved to platforms.winPortable.
@@ -223,43 +277,18 @@ export default function DownloadButton() {
     return (
       <div className="download-cta">
         <a className="btn btn--primary btn--download" href={info.downloadUrl} download>
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M12 3v12" />
-            <path d="M7 12l5 5 5-5" />
-            <path d="M4 21h16" />
-          </svg>
+          {DOWNLOAD_ICON}
           Download for Windows
         </a>
 
-        <p className="download-card__version">
-          Version {info.version}
-          {size ? ` · ${size}` : ""} · Windows 10/11 (64-bit)
-        </p>
+        <VersionLine version={info.version} sizeBytes={info.sizeBytes} />
         <p className="download-card__meta">
           Installer · Fighter database included · <strong>Updates itself</strong> — later
           releases install from inside the app.
         </p>
 
-        {info.releaseNotes && info.releaseNotes.length > 0 && (
-          <div className="whats-new">
-            <h3>
-              What's new in {info.version}
-              {info.releasedAt ? <span> · {info.releasedAt}</span> : null}
-            </h3>
-            <ul>
-              {info.releaseNotes.map((note) => (
-                <li key={note}>{note}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {info.sha256 && (
-          <p className="download-card__hash">
-            <span>SHA-256</span>
-            <code>{info.sha256}</code>
-          </p>
-        )}
+        <WhatsNew info={info} />
+        <Sha256 value={info.sha256} />
 
         {portable && (
           <div className="portable-option">
@@ -295,26 +324,7 @@ export default function DownloadButton() {
                     Download portable zip
                   </a>
                 )}
-                {transfer.state === "saving" && (
-                  <div className="transfer-bar" role="progressbar" aria-valuenow={transfer.percent} aria-valuemin={0} aria-valuemax={100}>
-                    <span className="transfer-bar__fill" style={{ width: `${transfer.percent}%` }} />
-                  </div>
-                )}
-                {transfer.state === "done" && (
-                  <p className="transfer-note transfer-note--ok">
-                    Saved to <strong>{transfer.folder}</strong>. Extract the zip there, then run{" "}
-                    <code>MMA Assist.exe</code>.
-                  </p>
-                )}
-                {transfer.state === "error" && (
-                  <p className="transfer-note transfer-note--err">
-                    {transfer.message}{" "}
-                    <a href={portable.downloadUrl} download>
-                      Download normally instead
-                    </a>
-                    .
-                  </p>
-                )}
+                <TransferStatus transfer={transfer} retryUrl={portable.downloadUrl} />
                 {portable.sizeBytes && (
                   <p className="download-card__version">{formatSize(portable.sizeBytes)} zip</p>
                 )}
@@ -351,61 +361,26 @@ export default function DownloadButton() {
         </button>
       ) : (
         <a className="btn btn--primary btn--download" href={info.downloadUrl} download>
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M12 3v12" />
-            <path d="M7 12l5 5 5-5" />
-            <path d="M4 21h16" />
-          </svg>
+          {DOWNLOAD_ICON}
           Download for Windows
         </a>
       )}
 
-      {transfer.state === "saving" && (
-        <div className="transfer-bar" role="progressbar" aria-valuenow={transfer.percent} aria-valuemin={0} aria-valuemax={100}>
-          <span className="transfer-bar__fill" style={{ width: `${transfer.percent}%` }} />
-        </div>
-      )}
-      {transfer.state === "done" && (
-        <p className="transfer-note transfer-note--ok">
-          Saved to <strong>{transfer.folder}</strong>. Extract the zip there, then run{" "}
-          <code>MMA Assist.exe</code> — it creates its <code>data</code> folder alongside itself.
-        </p>
-      )}
-      {transfer.state === "error" && (
-        <p className="transfer-note transfer-note--err">
-          {transfer.message}{" "}
-          <a href={info.downloadUrl} download>
-            Download normally instead
-          </a>
-          .
-        </p>
-      )}
+      <TransferStatus
+        transfer={transfer}
+        retryUrl={info.downloadUrl}
+        doneSuffix={
+          <>
+            {" "}— it creates its <code>data</code> folder alongside itself.
+          </>
+        }
+      />
 
-      <p className="download-card__version">
-        Version {info.version}
-        {size ? ` · ${size}` : ""} · Windows 10/11 (64-bit)
-      </p>
+      <VersionLine version={info.version} sizeBytes={info.sizeBytes} />
       <p className="download-card__meta">Desktop app · Fighter database included</p>
 
-      {info.releaseNotes && info.releaseNotes.length > 0 && (
-        <div className="whats-new">
-          <h3>
-            What's new in {info.version}
-            {info.releasedAt ? <span> · {info.releasedAt}</span> : null}
-          </h3>
-          <ul>
-            {info.releaseNotes.map((note) => (
-              <li key={note}>{note}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {info.sha256 && (
-        <p className="download-card__hash">
-          <span>SHA-256</span>
-          <code>{info.sha256}</code>
-        </p>
-      )}
+      <WhatsNew info={info} />
+      <Sha256 value={info.sha256} />
     </div>
   );
 }

@@ -1,12 +1,6 @@
-import { useEffect, useState } from "react";
-import type { PlatformArtifact } from "./DownloadButton";
+import { formatSize, useVersionJson } from "../lib/versionJson";
 
 const RELEASES_URL = "https://github.com/OppositeMusical/UFC-Website/releases";
-
-function formatSize(bytes?: number): string | null {
-  if (!bytes) return null;
-  return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
-}
 
 /**
  * macOS download, driven by version.json rather than hardcoded.
@@ -17,25 +11,8 @@ function formatSize(bytes?: number): string | null {
  * separate machines, so the two entries appear independently.
  */
 export default function MacDownload() {
-  const [artifact, setArtifact] = useState<PlatformArtifact | null>(null);
-  const [checked, setChecked] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/version.json", { cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
-      .then((data) => {
-        if (cancelled) return;
-        setArtifact(data?.platforms?.mac ?? null);
-        setChecked(true);
-      })
-      .catch(() => {
-        if (!cancelled) setChecked(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { data, checked } = useVersionJson();
+  const artifact = data?.platforms?.mac ?? null;
 
   const appleIcon = (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

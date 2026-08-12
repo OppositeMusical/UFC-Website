@@ -138,3 +138,96 @@ def test_ollama_sends_no_system_message_when_none():
     provider.generate(messages=[{"role": "user", "content": "hi"}])
     sent = json.loads(responses.calls[0].request.body)
     assert [m["role"] for m in sent["messages"]] == ["user"]
+
+
+# --- Claude: model list comes from the API, keyed to the user's key ----------
+#
+# v0.6.2 replaced the hardcoded model lineup with GET /v1/models, which is
+# authenticated - so the Settings picker offers exactly the models the saved
+# key can use, and new releases appear without shipping an app update.
+
+
+def test_claude_list_models_returns_ids_from_the_api():
+    provider, _ = _claude_with_fake_client()
+    provider.client = SimpleNamespace(
+        models=SimpleNamespace(
+            list=lambda: [
+                SimpleNamespace(id="claude-opus-5"),
+                SimpleNamespace(id="claude-sonnet-5"),
+                SimpleNamespace(id="claude-haiku-4-5"),
+            ]
+        )
+    )
+    assert provider.list_models() == [
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "claude-haiku-4-5",
+    ]
+
+
+def test_claude_list_models_rejected_key_raises_provider_error():
+    import httpx
+    from anthropic import AuthenticationError
+
+    def raise_auth():
+        request = httpx.Request("GET", "https://api.anthropic.com/v1/models")
+        response = httpx.Response(401, request=request)
+        raise AuthenticationError("unauthorized", response=response, body=None)
+
+    provider, _ = _claude_with_fake_client()
+    provider.client = SimpleNamespace(models=SimpleNamespace(list=raise_auth))
+    with pytest.raises(ProviderError, match="rejected"):
+        provider.list_models()
+
+
+# --- Settings: the picked Claude model is persisted and actually used --------
+#
+# secret_manager is patched throughout: the real one reads the OS keyring, so
+# an unpatched test could pick up a developer's genuine key and hit the API.
+
+
+def _fake_secrets(monkeypatch, key: str | None):
+    monkeypatch.setattr(
+        "app.services.ai.factory.secret_manager",
+        SimpleNamespace(get_key=lambda name: key),
+    )
+
+
+def test_claude_models_route_without_key_is_a_readable_400(client, monkeypatch):
+    _fake_secrets(monkeypatch, None)
+    resp = client.get("/settings/claude/models")
+    assert resp.status_code == 400
+    assert "claude" in resp.get_json()["error"]
+
+
+def test_claude_models_route_reports_lineup_and_active_model(client, monkeypatch):
+    _fake_secrets(monkeypatch, "sk-ant-not-a-real-key")
+    monkeypatch.setattr(
+        AnthropicProvider, "list_models", lambda self: ["claude-opus-5", "claude-haiku-4-5"]
+    )
+    data = client.get("/settings/claude/models").get_json()
+    assert data["models"] == ["claude-opus-5", "claude-haiku-4-5"]
+    # Nothing saved yet, so the active model is the provider default.
+    assert data["active"] == "claude-opus-5"
+
+
+def test_saved_claude_model_is_used_by_the_factory(client, app, monkeypatch):
+    _fake_secrets(monkeypatch, "sk-ant-not-a-real-key")
+    resp = client.post(
+        "/settings/provider",
+        json={"provider": "claude", "model": "claude-haiku-4-5"},
+    )
+    assert resp.get_json()["ok"] is True
+    with app.app_context():
+        provider = build_provider("claude")
+    assert provider.model == "claude-haiku-4-5"
+
+
+def test_explicit_model_overrides_the_saved_claude_setting(client, app, monkeypatch):
+    """Test Connection sends the on-screen dropdown value; it must win over
+    whatever was saved earlier."""
+    _fake_secrets(monkeypatch, "sk-ant-not-a-real-key")
+    client.post("/settings/provider", json={"provider": "claude", "model": "claude-haiku-4-5"})
+    with app.app_context():
+        provider = build_provider("claude", model="claude-sonnet-5")
+    assert provider.model == "claude-sonnet-5"

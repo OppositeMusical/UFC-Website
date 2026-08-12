@@ -5,7 +5,8 @@ from anthropic import Anthropic, APIConnectionError, APIStatusError, Authenticat
 from app.services.ai.base import AIProvider, ProviderError
 
 # claude-opus-5 is Anthropic's recommended default model as of this writing.
-# Users can override via Settings; list_models() offers the current lineup.
+# Users can override via Settings; list_models() asks the API which models
+# the configured key can access, so the picker is always current.
 DEFAULT_MODEL = "claude-opus-5"
 
 
@@ -57,4 +58,18 @@ class AnthropicProvider(AIProvider):
         return "".join(text_parts)
 
     def list_models(self) -> list[str]:
-        return ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"]
+        """Models this API key can actually use, straight from GET /v1/models.
+
+        The endpoint is authenticated, so the answer is per-key: a key without
+        access to a model never sees it listed, and newly released models show
+        up without an app update. Newest first, as the API returns them.
+        Iterating the page auto-paginates.
+        """
+        try:
+            return [model.id for model in self.client.models.list()]
+        except AuthenticationError as exc:
+            raise ProviderError("claude: API key was rejected") from exc
+        except APIConnectionError as exc:
+            raise ProviderError("claude: could not connect") from exc
+        except APIStatusError as exc:
+            raise ProviderError(f"claude: request failed: {exc}") from exc

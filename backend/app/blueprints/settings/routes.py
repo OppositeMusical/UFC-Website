@@ -6,7 +6,11 @@ from flask import Blueprint, jsonify, render_template, request
 
 from app.config import Config
 from app.extensions import Session
-from app.models.app_setting import KEY_ACTIVE_OLLAMA_MODEL, KEY_ACTIVE_PROVIDER
+from app.models.app_setting import (
+    KEY_ACTIVE_CLAUDE_MODEL,
+    KEY_ACTIVE_OLLAMA_MODEL,
+    KEY_ACTIVE_PROVIDER,
+)
 from app.services.ai.base import ProviderError
 from app.services.ai.factory import PROVIDER_NAMES, build_provider
 from app.services.ai.ollama_provider import OllamaProvider
@@ -56,6 +60,8 @@ def set_provider():
     model = payload.get("model")
     if provider == "ollama" and model:
         set_setting(KEY_ACTIVE_OLLAMA_MODEL, model)
+    if provider == "claude" and model:
+        set_setting(KEY_ACTIVE_CLAUDE_MODEL, model)
     return jsonify({"ok": True})
 
 
@@ -63,6 +69,21 @@ def set_provider():
 def ollama_models():
     provider = OllamaProvider(base_url=Config.OLLAMA_BASE_URL, model="")
     return jsonify({"models": provider.list_models()})
+
+
+@bp.route("/claude/models")
+def claude_models():
+    """Models the saved Claude key can access, plus which one is active.
+
+    Uses the stored key (same as Test Connection), so with no key saved this
+    returns the factory's "add one in Settings" message as a 400 - the UI
+    shows that in the dropdown rather than a bare failure.
+    """
+    try:
+        provider = build_provider("claude")
+        return jsonify({"models": provider.list_models(), "active": provider.model})
+    except ProviderError as exc:
+        return jsonify({"error": str(exc)}), 400
 
 
 @bp.route("/test-connection", methods=["POST"])

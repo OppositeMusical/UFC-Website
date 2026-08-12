@@ -3,12 +3,16 @@ document.addEventListener("DOMContentLoaded", () => {
   const apiKeyRow = document.getElementById("api-key-row");
   const ollamaRow = document.getElementById("ollama-row");
   const ollamaModelSelect = document.getElementById("ollama-model-select");
+  const claudeRow = document.getElementById("claude-row");
+  const claudeModelSelect = document.getElementById("claude-model-select");
 
   function refreshVisibility() {
     const provider = providerSelect.value;
     apiKeyRow.style.display = provider === "ollama" ? "none" : "block";
     ollamaRow.style.display = provider === "ollama" ? "block" : "none";
+    claudeRow.style.display = provider === "claude" ? "block" : "none";
     if (provider === "ollama") loadOllamaModels();
+    if (provider === "claude") loadClaudeModels();
   }
   providerSelect.addEventListener("change", refreshVisibility);
   refreshVisibility();
@@ -33,6 +37,30 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  async function loadClaudeModels() {
+    claudeModelSelect.innerHTML = "<option>Loading...</option>";
+    try {
+      // Backed by Anthropic's authenticated /v1/models endpoint, so the list
+      // is exactly what the saved key can use - and it 400s with a readable
+      // message when no key is saved yet or the key is rejected.
+      const data = await apiFetch("/settings/claude/models");
+      claudeModelSelect.innerHTML = "";
+      data.models.forEach((m) => {
+        const opt = document.createElement("option");
+        opt.value = m;
+        opt.textContent = m;
+        if (m === data.active) opt.selected = true;
+        claudeModelSelect.appendChild(opt);
+      });
+    } catch (e) {
+      claudeModelSelect.innerHTML = "";
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = e.message;
+      claudeModelSelect.appendChild(opt);
+    }
+  }
+
   const saveForm = document.getElementById("provider-form");
   const saveStatus = document.getElementById("save-status");
   saveForm.addEventListener("submit", async (evt) => {
@@ -44,11 +72,17 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
       const key = document.getElementById("api-key-input").value.trim();
       if (key) payload.api_key = key;
+      if (provider === "claude" && claudeModelSelect.value) {
+        payload.model = claudeModelSelect.value;
+      }
     }
     saveStatus.textContent = "Saving...";
     try {
       await apiFetch("/settings/provider", { method: "POST", body: JSON.stringify(payload) });
       saveStatus.textContent = "Saved.";
+      // A key may have just been saved for the first time (or replaced), so
+      // the model list can go from an error message to a real lineup.
+      if (provider === "claude") loadClaudeModels();
     } catch (e) {
       saveStatus.textContent = `Error: ${e.message}`;
     }
@@ -59,9 +93,16 @@ document.addEventListener("DOMContentLoaded", () => {
   testBtn.addEventListener("click", async () => {
     testStatus.textContent = "Testing...";
     try {
+      // For Claude, test the model showing in the dropdown - it may not be
+      // saved yet, and testing a different model than the one on screen
+      // would be misleading.
+      const body = { provider: providerSelect.value };
+      if (providerSelect.value === "claude" && claudeModelSelect.value) {
+        body.model = claudeModelSelect.value;
+      }
       const data = await apiFetch("/settings/test-connection", {
         method: "POST",
-        body: JSON.stringify({ provider: providerSelect.value }),
+        body: JSON.stringify(body),
       });
       testStatus.textContent = data.ok ? `OK: ${data.reply}` : `Failed: ${data.error}`;
     } catch (e) {

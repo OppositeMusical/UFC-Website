@@ -16,6 +16,7 @@ from app.extensions import Base
 # existing databases are harmless; they are simply never consulted.
 KEY_ACTIVE_PROVIDER = "active_provider"
 KEY_ACTIVE_OLLAMA_MODEL = "active_ollama_model"
+KEY_ACTIVE_CLAUDE_MODEL = "active_claude_model"
 KEY_SCHEMA_VERSION = "schema_version"
 
 CURRENT_SCHEMA_VERSION = "1"

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from app.config import Config
-from app.models.app_setting import KEY_ACTIVE_OLLAMA_MODEL, KEY_ACTIVE_PROVIDER
+from app.models.app_setting import (
+    KEY_ACTIVE_CLAUDE_MODEL,
+    KEY_ACTIVE_OLLAMA_MODEL,
+    KEY_ACTIVE_PROVIDER,
+)
 from app.services.ai.base import AIProvider, ProviderError
 from app.services.ai.gemini_provider import GeminiProvider
 from app.services.ai.anthropic_provider import AnthropicProvider
@@ -36,6 +40,9 @@ def build_provider(provider_name: str, model: str | None = None) -> AIProvider:
             return DeepseekProvider(api_key=key, model=model)
         if provider_name == "gemini":
             return GeminiProvider(api_key=key, model=model)
-        return AnthropicProvider(api_key=key, model=model)
+        # Claude is the one cloud provider with a persisted model choice; a
+        # falsy setting falls through to the provider's default model.
+        claude_model = model or get_setting(KEY_ACTIVE_CLAUDE_MODEL, default=None)
+        return AnthropicProvider(api_key=key, model=claude_model)
 
     raise ProviderError(f"Unknown provider: {provider_name}")

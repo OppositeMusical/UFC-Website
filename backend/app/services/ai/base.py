@@ -21,7 +21,8 @@ class AIProvider(ABC):
         raise NotImplementedError
 
     def list_models(self) -> list[str]:
-        """Only meaningful for providers with a discoverable local model list
-        (Ollama). Cloud providers return a small curated static list.
+        """Models the user can pick from for this provider. Ollama discovers
+        what is installed locally; Anthropic asks the API what the key can
+        access. Providers without a discovery endpoint return [].
         """
         return []

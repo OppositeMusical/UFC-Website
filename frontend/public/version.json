@@ -1,31 +1,30 @@
 {
-  "version": "0.6.0",
-  "releasedAt": "2026-08-11",
+  "version": "0.6.1",
+  "releasedAt": "2026-08-12",
   "releaseNotes": [
-    "New: the DraftKings page prices three moneyline markets - method of victory, method in a given round, and whether the fight reaches a round",
-    "Enter the sportsbook's price and the app compares it against the model's own estimate, which is made without seeing that price",
-    "A gap larger than 20 points is flagged as untrustworthy rather than shown as value, because that usually means the model is wrong rather than the market"
+    "Fixes Claude API keys being rejected. Settings -> Test Connection failed with a confusing \"Input should be a valid array\" error even when the key was perfectly valid - the app was sending an empty system field that the Anthropic API refuses. It is now omitted, and Claude keys work.",
+    "Only Claude was affected, and only the Test Connection button. Ollama, OpenAI, Gemini and Deepseek were never involved, and Claude predictions and chat already worked once a key was saved."
   ],
   "platforms": {
     "win": {
-      "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/MMA-Assist-0.6.0-setup-x64.exe",
-      "fileName": "MMA-Assist-0.6.0-setup-x64.exe",
+      "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/MMA-Assist-0.6.1-setup-x64.exe",
+      "fileName": "MMA-Assist-0.6.1-setup-x64.exe",
       "kind": "nsis",
-      "sizeBytes": 187320752,
-      "sha256": "02da2e64cb45bd375fa318a23474bee62b99181046cb6b91aebeea6fe94f6375"
+      "sizeBytes": 187321560,
+      "sha256": "33efbe10dee12d888784a93f5d203ab36216cc4c20791abcbed0de484174c8cb"
     },
     "winPortable": {
-      "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/MMA-Assist-0.6.0-portable-win64.zip",
-      "fileName": "MMA-Assist-0.6.0-portable-win64.zip",
+      "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/MMA-Assist-0.6.1-portable-win64.zip",
+      "fileName": "MMA-Assist-0.6.1-portable-win64.zip",
       "kind": "portable",
-      "sizeBytes": 244407668,
-      "sha256": "ae1a3c32c645703a83330e34c5accaaa7870471c19cad92d86ae71116e59bd87"
+      "sizeBytes": 244407771,
+      "sha256": "d5c76a5daf205f6693bfd856195c88fc6977e1c10976a99ebd6f22a92c191ea1"
     }
   },
   "notes": "Points at the latest GitHub release of OppositeMusical/UFC-Website. Create that release and upload the assets, or the links 404.",
-  "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/MMA-Assist-0.6.0-setup-x64.exe",
-  "fileName": "MMA-Assist-0.6.0-setup-x64.exe",
+  "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/MMA-Assist-0.6.1-setup-x64.exe",
+  "fileName": "MMA-Assist-0.6.1-setup-x64.exe",
   "kind": "nsis",
-  "sizeBytes": 187320752,
-  "sha256": "02da2e64cb45bd375fa318a23474bee62b99181046cb6b91aebeea6fe94f6375"
+  "sizeBytes": 187321560,
+  "sha256": "33efbe10dee12d888784a93f5d203ab36216cc4c20791abcbed0de484174c8cb"
 }

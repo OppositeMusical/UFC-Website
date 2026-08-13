@@ -49,25 +49,15 @@ export default function MacDownload() {
         <p className="download-card__version">
           {size ? `${size} · ` : ""}macOS 11 or later
         </p>
-        <p className="download-card__meta">Apple Silicon &amp; Intel · Fighter database included</p>
+        <p className="download-card__meta">Apple Silicon (M1 or later) · Fighter database included</p>
 
-        {/* Gatekeeper refuses unsigned downloads outright rather than warning,
-            and the message it shows says "damaged", which reads as a corrupt
-            file. Saying so here is the difference between a user retrying and
-            a user deleting it. */}
-        <p className="transfer-note transfer-note--err">
-          This build isn't notarized by Apple yet, so macOS may say it's{" "}
-          <em>damaged and can't be opened</em>. It isn't — that's Gatekeeper refusing an
-          unsigned download. Remove the quarantine flag to run it:
-          <br />
-          <code>xattr -dr com.apple.quarantine "/Applications/MMA Assist.app"</code>
-          <br />
-          Only do that if you trust the source. You can check the download against the
-          SHA-256 on the{" "}
+        <p className="transfer-note">
+          Signed and notarized by Apple — it opens like any other app, and updates
+          itself from Settings. Checksums are on the{" "}
           <a href={RELEASES_URL} target="_blank" rel="noreferrer">
             releases page
-          </a>{" "}
-          first.
+          </a>
+          .
         </p>
       </div>
     </div>

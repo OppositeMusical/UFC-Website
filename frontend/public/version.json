@@ -1,7 +1,11 @@
 {
   "version": "0.7.5",
   "releasedAt": "2026-08-13",
-  "releaseNotes": [],
+  "releaseNotes": [
+    "macOS builds are now Developer ID signed and notarized by Apple \u2014 the \"damaged app\" warning and the Terminal workaround are gone",
+    "macOS now updates in-app: Settings \u2192 Check for Updates (signed installs, v0.7.5 onward)",
+    "Fresh installs include the full fighter database again (6,746 fighters) \u2014 recent releases could start empty"
+  ],
   "platforms": {
     "win": {
       "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/MMA-Assist-0.7.5-setup-x64.exe",
@@ -21,8 +25,8 @@
       "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/latest/download/MMA-Assist-0.7.5-macos.dmg",
       "fileName": "MMA-Assist-0.7.5-macos.dmg",
       "kind": "dmg",
-      "sizeBytes": 224720417,
-      "sha256": "0c7658ec8ddcacf1a0091fe8b7f5c6717353b70afca791c890bd57e0635254a1"
+      "sizeBytes": 226099052,
+      "sha256": "2ff447e76f3ac0722a9375857e8c96bcd09f48a3ae5b6d6e9f46674ccfbe583d"
     }
   },
   "notes": "Points at the latest GitHub release of OppositeMusical/UFC-Website. Create that release and upload the assets, or the links 404.",

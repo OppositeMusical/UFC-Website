@@ -7,11 +7,18 @@ Electron desktop shell, build tooling — lives in the private
 repo.
 
 **Releases stay here.** Installed copies of the app poll this repo's public
-GitHub release assets (`latest.yml` + installer) for updates, and the portable
-build reads [`frontend/public/version.json`](frontend/public/version.json) on
-`main`. Publishing a release means uploading the four artifacts to a release
-**on this repo** and committing the regenerated `version.json` here — both are
-produced by the app repo's `build_release.py`.
+GitHub release assets (`latest.yml` / `latest-mac.yml` + installer) for
+updates, and the portable build reads
+[`frontend/public/version.json`](frontend/public/version.json) on `main`.
+Publishing a release means uploading the artifacts (Windows + macOS) to a
+release **on this repo** and committing the regenerated `version.json` here —
+since v0.7.0 the app repo's release pipeline does both on a version-tag push.
+
+The pinned **`data-packs`** release holds `seed_data.tar.gz`, the fighter
+database the app repo's CI bundles into every build (it is a build artifact,
+not source). Its assets are refreshed in place under the same names — never
+delete that release, or every build breaks and shipped apps lose their data
+downloads.
 
 ## Quick start
 
@@ -39,6 +46,12 @@ Railway injects `PORT`; the server binds it on `0.0.0.0` and answers
 
 ## Publishing a release (from the app repo)
 
+**Normally automatic**: pushing a `v*` tag in UFC-Website-Backend runs its
+`release.yml`, which builds both platforms, creates the release here
+(draft → upload → publish), and pushes the regenerated `version.json` to
+`main`. The manual flow below is the fallback, and is what the pipeline
+automates.
+
 **`frontend/public/downloads/` is gitignored**, so the ~180MB installer is not
 in the repo and will not exist on Railway. `version.json` must point at a
 GitHub release on this repo:
@@ -47,14 +60,18 @@ GitHub release on this repo:
    release"); its `build_release.py --github-release OppositeMusical/UFC-Website`
    step regenerates `version.json` with the release URL, size, SHA-256 and
    notes.
-2. Create the GitHub release **on this repo** with all four artifacts — **as a
+2. Create the GitHub release **on this repo** with all the artifacts — **as a
    draft first, upload, then un-draft**. An empty release sitting at
    `releases/latest` makes every installed copy's update check 404 for the
    length of the upload:
-   - `MMA-Assist-<version>-setup-x64.exe` — primary, self-updating
+   - `MMA-Assist-<version>-setup-x64.exe` — Windows primary, self-updating
    - `MMA-Assist-<version>-setup-x64.exe.blockmap` — differential updates
    - `MMA-Assist-<version>-portable-win64.zip`
-   - `latest.yml` — what installed copies poll
+   - `latest.yml` — what installed Windows copies poll
+   - `MMA-Assist-<version>-macos.dmg` — macOS primary (Apple Silicon)
+   - `MMA-Assist-<version>-arm64-mac.zip` (+ `.blockmap`) — what signed mac
+     builds (v0.7.5+) self-update from
+   - `latest-mac.yml` — what installed mac copies poll
 3. Copy the regenerated `version.json` into this repo and commit it
    (`Publish v<version>`). That commit is what announces the release to
    portable/browser users.
@@ -87,4 +104,5 @@ Two independent feeds, deliberately not mixed:
 | Build | Reads | Used for |
 |---|---|---|
 | Installed (NSIS) | `latest.yml` on this repo's GitHub release | download + install in place |
+| Installed (mac, signed v0.7.5+) | `latest-mac.yml` on this repo's GitHub release | Squirrel.Mac installs from the release zip |
 | Portable / browser | `version.json` on `main` | "a newer version exists" notice |

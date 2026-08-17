@@ -34,5 +34,13 @@
   "fileName": "MMA-Assist-0.7.5-setup-x64.exe",
   "kind": "nsis",
   "sizeBytes": 185510296,
-  "sha256": "766042bba3c05672cac36966ba7346d5ae2bbfba912cf79d8520b99cb8d841d0"
+  "sha256": "766042bba3c05672cac36966ba7346d5ae2bbfba912cf79d8520b99cb8d841d0",
+  "dataPack": {
+    "packVersion": "2026-08-17",
+    "downloadUrl": "https://github.com/OppositeMusical/UFC-Website/releases/download/data-packs/MMA-Assist-fighters-2026-08-17.sqlite.zip",
+    "fileName": "MMA-Assist-fighters-2026-08-17.sqlite.zip",
+    "sizeBytes": 1013028,
+    "sha256": "a4ffeab9a0142eba91d834593a530b2d57355da423bc6d1285050202461f8be6",
+    "fighterCount": 6746
+  }
 }
